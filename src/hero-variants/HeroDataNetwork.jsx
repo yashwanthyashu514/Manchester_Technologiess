@@ -46,8 +46,8 @@ export default function HeroDataNetwork() {
         this.id = id
         this.x = Math.random() * window.innerWidth
         this.y = Math.random() * window.innerHeight
-        this.vx = (Math.random() - 0.5) * 0.3
-        this.vy = (Math.random() - 0.5) * 0.3
+        this.vx = (Math.random() - 0.5) * 0.5
+        this.vy = (Math.random() - 0.5) * 0.5
         this.radius = Math.random() * 1.5 + 1
       }
       update() {
@@ -116,7 +116,7 @@ export default function HeroDataNetwork() {
             this.link = link
             this.progress = 0
             // Packets move at different speeds
-            this.speed = Math.random() * 0.01 + 0.005
+            this.speed = Math.random() * 0.015 + 0.008
             // Determine direction along the link (A to B, or B to A)
             this.direction = Math.random() > 0.5 ? 1 : -1
             if (this.direction === -1) this.progress = 1
@@ -172,14 +172,14 @@ export default function HeroDataNetwork() {
         links = []
         packets = []
         // Number of nodes scales with screen size
-        const numNodes = Math.min(80, Math.floor((window.innerWidth * window.innerHeight) / 12000))
+        const numNodes = Math.min(110, Math.floor((window.innerWidth * window.innerHeight) / 9000))
         for (let i=0; i<numNodes; i++) nodes.push(new Node(i))
         
         // Pre-calculate permanent random links
         // We only draw them when distance is < 200 to give a dynamic feel
         for (let i=0; i<nodes.length; i++) {
             for (let j=i+1; j<nodes.length; j++) {
-                if (Math.random() > 0.85) {
+                if (Math.random() > 0.82) {
                     links.push(new Link(nodes[i], nodes[j]))
                 }
             }
@@ -203,7 +203,7 @@ export default function HeroDataNetwork() {
         }
 
         // Spawm new data packets randomly
-        if (Math.random() < 0.15 && links.length > 0) {
+        if (Math.random() < 0.25 && links.length > 0) {
             const randomLink = links[Math.floor(Math.random() * links.length)]
             packets.push(new Packet(randomLink))
         }

@@ -17,13 +17,12 @@ import {
   MessageCircle,
   ChevronRight,
 } from 'lucide-react'
-import HeroBackground from '../components/HeroBackground'
 import AnimatedSection from '../components/AnimatedSection'
 import ServiceCard from '../components/ServiceCard'
 import ProcessStep from '../components/ProcessStep'
 import PortfolioCard from '../components/PortfolioCard'
 import TestimonialCard from '../components/TestimonialCard'
-import HeroSwitcher from '../components/HeroSwitcher'
+import HeroDataNetwork from '../hero-variants/HeroDataNetwork'
 
 const services = [
   {
@@ -116,7 +115,7 @@ export default function Home() {
     <main>
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <HeroSwitcher />
+        <HeroDataNetwork />
         <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background z-[1]" />
 
         <div className="relative z-10 section-padding max-w-7xl mx-auto text-center pt-20">

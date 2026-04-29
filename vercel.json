@@ -3,8 +3,8 @@
     "trailingSlash": false,
     "redirects": [
         {
-            "source": "https://www.yourdomain.com/(.*)",
-            "destination": "https://yourdomain.com/$1",
+            "source": "https://manchester-technologies.vercel.app/(.*)",
+            "destination": "https://manchester-technologies.vercel.app/$1",
             "permanent": true
         }
     ]

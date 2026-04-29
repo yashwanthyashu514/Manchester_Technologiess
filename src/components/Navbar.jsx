@@ -37,18 +37,8 @@ export default function Navbar() {
       <div className="section-padding max-w-7xl mx-auto">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative w-10 h-10 rounded-lg bg-accent flex items-center justify-center overflow-hidden group-hover:shadow-lg group-hover:shadow-accent/30 transition-all duration-300">
-              {/* Shimmer on logo */}
-              <span
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
-                  transform: 'skewX(-25deg)',
-                  animation: 'shimmerSweep 2.5s ease-in-out infinite',
-                }}
-              />
-              <Zap className="w-5 h-5 text-background relative z-10" />
-            </div>
+            <img src="/logo.jpeg" alt="Manchester Technology Logo" className="h-10 w-auto rounded-lg object-contain" />
+
             <span className="font-heading font-bold text-xl tracking-tight">
               Manchester<span className="text-accent">Tech</span>
             </span>

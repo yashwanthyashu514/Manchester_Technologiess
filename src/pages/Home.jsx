@@ -113,9 +113,9 @@ const testimonials = [
 export default function Home() {
   return (
     <main>
+      <HeroDataNetwork />
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <HeroDataNetwork />
         <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background z-[1]" />
 
         <div className="relative z-10 section-padding max-w-7xl mx-auto text-center pt-20">
@@ -163,7 +163,7 @@ export default function Home() {
               </button>
             </Link>
             <a
-              href="https://wa.me/919876543210"
+              href="https://wa.me/919036351517"
               target="_blank"
               rel="noopener noreferrer"
               className="glow-button-outline flex items-center gap-2"
@@ -370,7 +370,7 @@ export default function Home() {
                 </button>
               </Link>
               <a
-                href="https://wa.me/919876543210"
+                href="https://wa.me/919036351517"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="glow-button-outline flex items-center gap-2"

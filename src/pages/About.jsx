@@ -32,18 +32,43 @@ export default function About() {
     <main className="pt-20">
       {/* Hero */}
       <section className="section-padding py-24 max-w-7xl mx-auto">
-        <AnimatedSection className="text-center max-w-4xl mx-auto">
-          <span className="text-accent text-sm font-medium tracking-wider uppercase">About Us</span>
-          <h1 className="heading-lg mt-4 mb-6">
-            Engineering Excellence from the{' '}
-            <span className="text-gradient">Manchester of Karnataka</span>
-          </h1>
-          <p className="body-lg">
-            Davanagere, known as the Manchester of Karnataka for its textile heritage, inspires
-            our work ethic: precision, craftsmanship, and relentless quality. We bring that same
-            spirit to every line of code we write.
-          </p>
-        </AnimatedSection>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <AnimatedSection className="text-left">
+            <span className="text-accent text-sm font-medium tracking-wider uppercase">About Us</span>
+            <h1 className="heading-lg mt-4 mb-6">
+              Engineering Excellence from the{' '}
+              <span className="text-gradient">Manchester of Karnataka</span>
+            </h1>
+            <p className="body-lg mb-6">
+              Manchester Technology is a premium digital agency specializing in high-performance web and mobile applications. We build robust, scalable solutions that are strategically designed to drive real business growth.
+            </p>
+            <p className="body-md text-text-secondary">
+              Davanagere, known as the Manchester of Karnataka for its textile heritage, inspires
+              our work ethic: precision, craftsmanship, and relentless quality. We bring that same
+              spirit to every line of code we write.
+            </p>
+          </AnimatedSection>
+
+          <AnimatedSection delay={0.2} className="flex justify-center lg:justify-end">
+            <div className="relative">
+              <motion.div
+                animate={{ y: [-8, 8, -8] }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                className="relative z-10"
+              >
+                <img 
+                  src="/logo.jpeg" 
+                  alt="Manchester Technology Logo" 
+                  className="w-80 h-80 lg:w-[450px] lg:h-[450px] object-contain rounded-2xl shadow-2xl shadow-accent/10 border border-white/5 bg-background/50 backdrop-blur-sm p-4"
+                />
+              </motion.div>
+            </div>
+          </AnimatedSection>
+        </div>
       </section>
 
       {/* Story Section */}

@@ -26,9 +26,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
           <div className="lg:col-span-1">
             <Link to="/" className="flex items-center gap-2 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                <Zap className="w-5 h-5 text-background" />
-              </div>
+              <img src="/logo.jpeg" alt="Manchester Technology Logo" className="h-10 w-auto rounded-lg object-contain" />
               <span className="font-heading font-bold text-xl">
                 Manchester<span className="text-accent">Tech</span>
               </span>

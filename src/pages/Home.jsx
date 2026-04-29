@@ -22,7 +22,6 @@ import ServiceCard from '../components/ServiceCard'
 import ProcessStep from '../components/ProcessStep'
 import PortfolioCard from '../components/PortfolioCard'
 import TestimonialCard from '../components/TestimonialCard'
-import HeroDataNetwork from '../hero-variants/HeroDataNetwork'
 
 const services = [
   {
@@ -113,7 +112,6 @@ const testimonials = [
 export default function Home() {
   return (
     <main>
-      <HeroDataNetwork />
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background z-[1]" />

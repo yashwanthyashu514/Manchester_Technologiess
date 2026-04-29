@@ -143,7 +143,7 @@ export default function Contact() {
                   </motion.div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div><h3 className="heading-md mb-6">Send a Message</h3></div>
+                    <div><h3 className="heading-md mb-6">Queries</h3></div>
                     <div>
                       <label htmlFor="name" className="block text-sm font-medium text-text-primary mb-2">Name</label>
                       <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} className={`w-full px-4 py-3 rounded-xl bg-background border transition-all duration-200 outline-none focus:ring-2 focus:ring-accent/50 ${errors.name ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-accent/50'}`} placeholder="Your name" />

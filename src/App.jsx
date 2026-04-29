@@ -7,6 +7,7 @@ import Home from './pages/Home'
 import About from './pages/About'
 import Services from './pages/Services'
 import Contact from './pages/Contact'
+import HeroDataNetwork from './hero-variants/HeroDataNetwork'
 
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
@@ -38,7 +39,8 @@ function App() {
   const location = useLocation()
 
   return (
-    <div className="min-h-screen bg-background text-text-primary font-body overflow-x-hidden">
+    <div className="min-h-screen bg-background text-text-primary font-body overflow-x-hidden relative">
+      {location.pathname === '/' && <HeroDataNetwork />}
       <CursorGlow />
       <Navbar />
       <AnimatePresence mode="wait">

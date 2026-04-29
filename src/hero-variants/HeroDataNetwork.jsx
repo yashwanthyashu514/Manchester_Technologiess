@@ -172,7 +172,7 @@ export default function HeroDataNetwork() {
       links = []
       packets = []
       // Number of nodes scales with screen size
-      const numNodes = Math.min(1000, Math.floor((window.innerWidth * window.innerHeight) / 3000))
+      const numNodes = Math.min(10000, Math.floor((window.innerWidth * window.innerHeight) / 3000))
       for (let i = 0; i < numNodes; i++) nodes.push(new Node(i))
 
       // Pre-calculate permanent random links

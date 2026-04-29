@@ -37,13 +37,13 @@ export default function Footer() {
               Building high-performance digital products that drive real business growth.
             </p>
             <div className="flex flex-col gap-3">
-              <a href="mailto:hello@manchestertechnology.com" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
+              <a href="mailto:manchestertechnologiess@gmail.com" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
                 <Mail className="w-4 h-4" />
-                hello@manchestertechnology.com
+                manchestertechnologiess@gmail.com
               </a>
-              <a href="tel:+919876543210" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
+              <a href="tel:+919036351517" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
                 <Phone className="w-4 h-4" />
-                +91 98765 43210
+                +91 90363 51517
               </a>
               <div className="flex items-center gap-2 text-text-secondary text-sm">
                 <MapPin className="w-4 h-4" />
@@ -84,7 +84,7 @@ export default function Footer() {
             <h4 className="font-heading font-semibold text-lg mb-6">Connect</h4>
             <div className="flex flex-col gap-4">
               <a
-                href="https://wa.me/919876543210"
+                href="https://wa.me/919036351517"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="glow-button-outline text-sm text-center"

@@ -203,7 +203,7 @@ export default function HeroDataNetwork() {
         }
 
         // Spawm new data packets randomly
-        if (Math.random() < 0.25 && links.length > 0) {
+        if (Math.random() < 0.6 && links.length > 0) {
             const randomLink = links[Math.floor(Math.random() * links.length)]
             packets.push(new Packet(randomLink))
         }

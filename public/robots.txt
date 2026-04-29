@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Explicitly block internal, API, and private paths
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+# Query parameters are allowed to be crawled so bots can discover canonical tags,
+# avoiding the crawler trap block anti-pattern.
+
+# Ensure sitemap is easily discoverable
+Sitemap: https://manchester-technologies.vercel.app/sitemap.xml

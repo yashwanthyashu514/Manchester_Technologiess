@@ -116,7 +116,7 @@ export default function HeroDataNetwork() {
         this.link = link
         this.progress = 0
         // Packets move at different speeds
-        this.speed = Math.random() * 0.015 + 0.008
+        this.speed = Math.random() * 0.002 + 0.001
         // Determine direction along the link (A to B, or B to A)
         this.direction = Math.random() > 0.5 ? 1 : -1
         if (this.direction === -1) this.progress = 1
@@ -157,8 +157,8 @@ export default function HeroDataNetwork() {
         ctx.beginPath()
         ctx.moveTo(x, y)
         // Tail points backwards
-        const tailX = x - (this.link.nodeB.x - this.link.nodeA.x) * this.direction * 0.08
-        const tailY = y - (this.link.nodeB.y - this.link.nodeA.y) * this.direction * 0.08
+        const tailX = x - (this.link.nodeB.x - this.link.nodeA.x) * this.direction * 0.03
+        const tailY = y - (this.link.nodeB.y - this.link.nodeA.y) * this.direction * 0.03
         ctx.lineTo(tailX, tailY)
         ctx.strokeStyle = `rgba(200, 169, 106, ${0.8 * scrollFade})`
         ctx.lineWidth = this.size * 0.8
@@ -203,7 +203,7 @@ export default function HeroDataNetwork() {
       }
 
       // Spawm new data packets randomly
-      if (Math.random() < 0.6 && links.length > 0) {
+      if (Math.random() < 0.1 && links.length > 0) {
         const randomLink = links[Math.floor(Math.random() * links.length)]
         packets.push(new Packet(randomLink))
       }

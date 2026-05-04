@@ -113,7 +113,7 @@ export default function Home() {
   return (
     <main>
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-32 md:pt-24">
         <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background z-[1]" />
 
         <div className="relative z-10 section-padding max-w-7xl mx-auto text-center pt-20">
@@ -131,10 +131,10 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4 }}
-            className="heading-xl max-w-5xl mx-auto mb-6"
+            className="heading-xl max-w-5xl mx-auto mb-6 leading-tight"
           >
             We Build{' '}
-            <span className="text-gradient">High-Performance</span>{' '}
+            <span className="text-gradient">High Performance</span>{' '}
             Digital Products That Drive Real Business Growth
           </motion.h1>
 

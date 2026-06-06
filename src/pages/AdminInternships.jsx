@@ -1,0 +1,1125 @@
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Users, 
+  Clock, 
+  UserCheck, 
+  CheckCircle, 
+  XCircle, 
+  Search, 
+  Filter, 
+  Mail, 
+  RefreshCw, 
+  Download, 
+  Calendar, 
+  MapPin, 
+  ExternalLink,
+  Plus,
+  Trash2,
+  Lock,
+  User,
+  Loader2,
+  AlertCircle,
+  Award,
+  CheckSquare,
+  Square,
+  FileText
+} from 'lucide-react'
+import AnimatedSection from '../components/AnimatedSection'
+
+export default function AdminInternships() {
+  const [token, setToken] = useState(localStorage.getItem('token'))
+  const [isAdmin, setIsAdmin] = useState(false)
+  
+  // Login Form States
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginError, setLoginError] = useState(null)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+
+  // Dashboard Data States
+  const [metrics, setMetrics] = useState({ total: 0, pending: 0, shortlisted: 0, selected: 0, active: 0 })
+  const [applications, setApplications] = useState([])
+  const [selectedApp, setSelectedApp] = useState(null)
+  const [selectedAppDetails, setSelectedAppDetails] = useState(null)
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+
+  // Filter & Search States
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterDomain, setFilterDomain] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterDuration, setFilterDuration] = useState('')
+  const [filterCollege, setFilterCollege] = useState('')
+
+  // Action / Form Modals States
+  const [activeModal, setActiveModal] = useState(null) // 'interview' | 'project'
+  const [adminNotes, setAdminNotes] = useState('')
+  const [isSavingNotes, setIsSavingNotes] = useState(false)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  
+  // Interview Form
+  const [interviewForm, setInterviewForm] = useState({
+    interview_date: '',
+    interview_time: '',
+    venue: '',
+    online_link: '',
+    instructions: ''
+  })
+
+  // Project Assignment Form
+  const [projectForm, setProjectForm] = useState({
+    github_username: '',
+    assigned_repository: '',
+    repository_url: '',
+    mentor_name: '',
+    project_name: '',
+    start_date: '',
+    end_date: ''
+  })
+
+  // Intern Tasks
+  const [newTaskText, setNewTaskText] = useState('')
+  const [newTaskDeadline, setNewTaskDeadline] = useState('')
+
+  // Verify token role on load
+  useEffect(() => {
+    if (token) {
+      try {
+        const user = JSON.parse(localStorage.getItem('user'))
+        if (user && user.role === 'admin') {
+          setIsAdmin(true)
+          fetchMetrics()
+          fetchApplications()
+        } else {
+          handleLogout()
+        }
+      } catch (e) {
+        handleLogout()
+      }
+    }
+  }, [token])
+
+  // Trigger data updates when filters change
+  useEffect(() => {
+    if (isAdmin) {
+      fetchApplications()
+    }
+  }, [searchTerm, filterDomain, filterStatus, filterDuration, filterCollege])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    setToken(null)
+    setIsAdmin(false)
+  }
+
+  // Admin Login Submission
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoginError(null)
+    setIsLoggingIn(true)
+
+    try {
+      const res = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Login verification failed.')
+      }
+
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      setToken(data.token)
+      setIsAdmin(true)
+    } catch (err) {
+      console.error(err)
+      setLoginError(err.message || 'Network credentials failure.')
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  // Fetch metrics data
+  const fetchMetrics = async () => {
+    try {
+      const res = await fetch('/api/admin/metrics', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setMetrics(data)
+      }
+    } catch (e) {
+      console.error('Failed to load metrics:', e)
+    }
+  }
+
+  // Fetch applications list
+  const fetchApplications = async () => {
+    try {
+      const queryParams = new URLSearchParams()
+      if (searchTerm) queryParams.append('search', searchTerm)
+      if (filterDomain) queryParams.append('domain', filterDomain)
+      if (filterStatus) queryParams.append('status', filterStatus)
+      if (filterDuration) queryParams.append('duration', filterDuration)
+      if (filterCollege) queryParams.append('college', filterCollege)
+
+      const res = await fetch(`/api/admin/applications?${queryParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setApplications(data.applications)
+      }
+    } catch (e) {
+      console.error('Failed to load applications list:', e)
+    }
+  }
+
+  // Open candidate profile detail
+  const handleSelectCandidate = async (app) => {
+    setSelectedApp(app)
+    setSelectedAppDetails(null)
+    setIsDetailsLoading(true)
+
+    try {
+      const res = await fetch(`/api/admin/applications/${app.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setSelectedAppDetails(result)
+        setAdminNotes(result.application.notes || '')
+      }
+    } catch (e) {
+      console.error('Failed to load candidate profile details:', e)
+    } finally {
+      setIsDetailsLoading(false)
+    }
+  }
+
+  // Save admin notes
+  const handleSaveNotes = async () => {
+    if (!selectedApp) return
+    setIsSavingNotes(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/notes`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ notes: adminNotes })
+      })
+
+      if (res.ok) {
+        alert('Notes saved successfully.')
+      }
+    } catch (e) {
+      alert('Failed to save notes.')
+    } finally {
+      setIsSavingNotes(false)
+    }
+  }
+
+  // Update application status
+  const handleUpdateStatus = async (status) => {
+    if (!selectedApp) return
+    if (!confirm(`Are you sure you want to transition candidate to "${status}"?`)) return
+    
+    setIsUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/status`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ status })
+      })
+
+      if (res.ok) {
+        alert(`Candidate status updated to ${status}.`)
+        fetchMetrics()
+        fetchApplications()
+        handleSelectCandidate(selectedApp) // reload details
+      }
+    } catch (e) {
+      alert('Failed to update status.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Resend application emails
+  const handleResendEmails = async () => {
+    if (!selectedApp) return
+    setIsUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/resend-email`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert('Application emails resent successfully.')
+        handleSelectCandidate(selectedApp)
+      } else {
+        alert(result.error || 'Failed to resend emails.')
+      }
+    } catch (e) {
+      alert('Error triggering resend email.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Schedule Interview Submission
+  const handleScheduleInterview = async (e) => {
+    e.preventDefault()
+    setIsUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/interview`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify(interviewForm)
+      })
+
+      if (res.ok) {
+        alert('Interview scheduled and invitation email sent.')
+        setActiveModal(null)
+        fetchMetrics()
+        fetchApplications()
+        handleSelectCandidate(selectedApp)
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Failed to schedule interview.')
+      }
+    } catch (err) {
+      alert('Error scheduling interview.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Assign Project Submission
+  const handleAssignProject = async (e) => {
+    e.preventDefault()
+    setIsUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/assign-project`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify(projectForm)
+      })
+
+      if (res.ok) {
+        alert('Project assigned successfully. Status updated to Active Intern.')
+        setActiveModal(null)
+        fetchMetrics()
+        fetchApplications()
+        handleSelectCandidate(selectedApp)
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Failed to assign project.')
+      }
+    } catch (err) {
+      alert('Error assigning project.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Add tasks checklist items
+  const handleAddTask = async () => {
+    if (!newTaskText || !newTaskDeadline) return
+    const currentTasks = selectedAppDetails.project ? selectedAppDetails.project.tasks : []
+    const updatedTasks = [
+      ...currentTasks,
+      {
+        id: Date.now(),
+        task: newTaskText,
+        deadline: newTaskDeadline,
+        status: 'Pending',
+        progress: 0
+      }
+    ]
+
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/tasks`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ tasks: updatedTasks })
+      })
+
+      if (res.ok) {
+        setNewTaskText('')
+        setNewTaskDeadline('')
+        handleSelectCandidate(selectedApp)
+      }
+    } catch (e) {
+      alert('Failed to add task.')
+    }
+  }
+
+  // Delete task checklist item
+  const handleDeleteTask = async (taskId) => {
+    if (!confirm('Are you sure you want to delete this task?')) return
+    const currentTasks = selectedAppDetails.project.tasks
+    const updatedTasks = currentTasks.filter(t => t.id !== taskId)
+
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/tasks`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ tasks: updatedTasks })
+      })
+
+      if (res.ok) {
+        handleSelectCandidate(selectedApp)
+      }
+    } catch (e) {
+      alert('Failed to delete task.')
+    }
+  }
+
+  // Complete Internship and Generate Certificate
+  const handleCompleteInternship = async () => {
+    if (!confirm('Are you sure you want to complete this internship? This will auto-generate and secure a QR verified PDF completion certificate.')) return
+    setIsUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${selectedApp.id}/complete`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (res.ok) {
+        alert('Internship completed. Verified certificate generated.')
+        fetchMetrics()
+        fetchApplications()
+        handleSelectCandidate(selectedApp)
+      } else {
+        const err = await res.json()
+        alert(err.error || 'Failed to complete internship.')
+      }
+    } catch (e) {
+      alert('Error completing internship.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Secure File Downloader (Injects JWT Header)
+  const downloadFile = async (filepath) => {
+    if (!filepath) return
+    const filename = filepath.split(/[\\/]/).pop()
+    
+    try {
+      const res = await fetch(`/api/admin/files/download/${encodeURIComponent(filename)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Download request rejected.')
+      
+      const blob = await res.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename.split('_').slice(1).join('_') || filename // cleans prefix ID from title
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (err) {
+      alert('File download failed: ' + err.message)
+    }
+  }
+
+  const getStatusBadgeColor = (status) => {
+    switch (status) {
+      case 'Pending': return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/5'
+      case 'Under Review': return 'text-orange-400 border-orange-400/20 bg-orange-400/5'
+      case 'Shortlisted': return 'text-purple-400 border-purple-400/20 bg-purple-400/5'
+      case 'Interview Scheduled': return 'text-blue-400 border-blue-400/20 bg-blue-400/5'
+      case 'Selected': return 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5'
+      case 'Rejected': return 'text-red-400 border-red-400/20 bg-red-400/5'
+      case 'Active Intern': return 'text-cyan-400 border-cyan-400/20 bg-cyan-400/5'
+      case 'Completed': return 'text-green-400 border-green-400/20 bg-green-400/5'
+      default: return 'text-white border-white/10 bg-white/5'
+    }
+  }
+
+  // RENDERING COMPONENT
+
+  // Login View
+  if (!isAdmin) {
+    return (
+      <main className="pt-20">
+        <section className="section-padding py-24 max-w-md mx-auto">
+          <AnimatedSection>
+            <div className="glass-card p-8 border border-white/5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-accent/10 rounded-full blur-2xl" />
+              
+              <div className="text-center mb-8">
+                <Lock className="w-12 h-12 text-accent mx-auto mb-4" />
+                <h1 className="heading-md text-white">Admin Dashboard Login</h1>
+                <p className="text-xs text-text-secondary mt-1">Manchester Technologies Portal Control</p>
+              </div>
+
+              {loginError && (
+                <div className="bg-red-950/20 border border-red-500/30 p-3 rounded-lg text-xs text-red-400 mb-6 flex gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p>{loginError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Registered Email *</label>
+                  <input 
+                    type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none text-sm"
+                    placeholder="admin@manchestertechnologies.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Password *</label>
+                  <input 
+                    type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none text-sm"
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <button 
+                  type="submit" disabled={isLoggingIn}
+                  className="w-full glow-button py-3 text-xs flex items-center justify-center gap-2"
+                >
+                  {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Authenticate Dashboard
+                </button>
+              </form>
+            </div>
+          </AnimatedSection>
+        </section>
+      </main>
+    )
+  }
+
+  // Dashboard Control Panel
+  return (
+    <main className="pt-20">
+      <section className="section-padding py-10 max-w-7xl mx-auto space-y-8">
+        
+        {/* Top Header Controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="heading-md text-white">Internships Management Board</h1>
+            <p className="text-xs text-text-secondary mt-1">Audit profiles, verify technical credentials, schedule interviews, and assign projects.</p>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="glow-button-outline px-5 py-2 text-xs self-start md:self-auto"
+          >
+            Logout session
+          </button>
+        </div>
+
+        {/* METRICS CARD GRID */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[
+            { label: 'Total Applicants', val: metrics.total, color: 'text-white', icon: Users },
+            { label: 'Pending Audits', val: metrics.pending, color: 'text-yellow-400', icon: Clock },
+            { label: 'Shortlisted', val: metrics.shortlisted, color: 'text-purple-400', icon: Mail },
+            { label: 'Selected Candidates', val: metrics.selected, color: 'text-emerald-400', icon: UserCheck },
+            { label: 'Active Internships', val: metrics.active, color: 'text-cyan-400', icon: CheckCircle }
+          ].map((item, idx) => (
+            <div key={idx} className="glass-card p-5 border border-white/5 relative overflow-hidden flex flex-col justify-between min-h-[100px]">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">{item.label}</span>
+                <item.icon className={`w-4 h-4 ${item.color} opacity-60`} />
+              </div>
+              <span className={`text-2xl font-bold font-heading ${item.color}`}>{item.val}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* SEARCH AND FILTERS TOOLBAR */}
+        <div className="glass-card p-5 border border-white/5">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="relative md:col-span-2">
+              <Search className="w-4 h-4 text-text-muted absolute left-3 top-3.5" />
+              <input 
+                type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search candidates (Name, college, skill)..."
+                className="w-full bg-background/60 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white focus:border-accent focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <select 
+                value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}
+                className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
+              >
+                <option value="">All Domains</option>
+                {['Web Development', 'Mobile App Development', 'Artificial Intelligence', 'Machine Learning', 'UI/UX Design', 'Database Development', 'Testing & QA', 'Full Stack Development'].map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <select 
+                value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
+              >
+                <option value="">All Statuses</option>
+                {['Pending', 'Under Review', 'Shortlisted', 'Interview Scheduled', 'Selected', 'Rejected', 'Active Intern', 'Completed'].map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <select 
+                value={filterDuration} onChange={(e) => setFilterDuration(e.target.value)}
+                className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
+              >
+                <option value="">All Durations</option>
+                <option value="30 Days">30 Days</option>
+                <option value="45 Days">45 Days</option>
+                <option value="60 Days">60 Days</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* APPLICATIONS LIST TABLE AND DETAIL DRAWER LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Applications list Table (Span 7 or 12) */}
+          <div className={`${selectedApp ? 'lg:col-span-6' : 'lg:col-span-12'} glass-card border border-white/5 overflow-hidden`}>
+            <div className="p-5 border-b border-white/5 flex justify-between items-center">
+              <h3 className="font-heading font-bold text-white text-sm">Candidates Roster</h3>
+              <span className="text-xs text-text-muted">{applications.length} Records</span>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 bg-background/40 text-text-secondary uppercase font-semibold">
+                    <th className="p-4">App ID</th>
+                    <th className="p-4">Candidate Name</th>
+                    <th className="p-4">Domain / Duration</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Mail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {applications.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-text-muted">No applications found matching search filters.</td>
+                    </tr>
+                  ) : (
+                    applications.map((app) => (
+                      <tr 
+                        key={app.id} 
+                        onClick={() => handleSelectCandidate(app)}
+                        className={`cursor-pointer hover:bg-white/5 transition-colors ${selectedApp?.id === app.id ? 'bg-accent/5' : ''}`}
+                      >
+                        <td className="p-4 font-bold text-white">{app.application_id}</td>
+                        <td className="p-4">
+                          <div className="font-bold text-white">{app.full_name}</div>
+                          <div className="text-[10px] text-text-muted mt-0.5">{app.college_name}</div>
+                        </td>
+                        <td className="p-4">
+                          <div className="text-white">{app.preferred_domain}</div>
+                          <div className="text-[10px] text-text-muted mt-0.5">{app.preferred_duration}</div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${getStatusBadgeColor(app.status)}`}>
+                            {app.status}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          {app.email_notification_sent ? (
+                            <span className="text-green-500 font-bold">Sent</span>
+                          ) : (
+                            <span className="text-red-400 font-bold" title={app.email_notification_error || 'SMTP Error'}>Failed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* CANDIDATE DETAIL PROFILE DRAWER (Span 6) */}
+          <AnimatePresence>
+            {selectedApp && (
+              <motion.div 
+                initial={{ opacity: 0, x: 50 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                exit={{ opacity: 0, x: 50 }} 
+                className="lg:col-span-6 glass-card border border-white/10 p-6 space-y-6 relative overflow-hidden"
+              >
+                {/* Close Button */}
+                <button 
+                  onClick={() => setSelectedApp(null)}
+                  className="absolute top-4 right-4 text-text-muted hover:text-white font-bold text-lg p-1 bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center"
+                >
+                  &times;
+                </button>
+
+                {isDetailsLoading && (
+                  <div className="py-20 flex flex-col items-center justify-center gap-3 text-text-secondary">
+                    <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                    <span>Fetching profile database record...</span>
+                  </div>
+                )}
+
+                {selectedAppDetails && (
+                  <div className="space-y-6">
+                    
+                    {/* Header */}
+                    <div>
+                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${getStatusBadgeColor(selectedAppDetails.application.status)}`}>
+                        {selectedAppDetails.application.status}
+                      </span>
+                      <h2 className="heading-md mt-4 text-white">{selectedAppDetails.application.full_name}</h2>
+                      <p className="text-xs text-text-secondary mt-1">Application ID: <strong>{selectedAppDetails.application.application_id}</strong></p>
+                    </div>
+
+                    {/* Email Log Retrier Warning Banner */}
+                    {selectedAppDetails.application.email_notification_sent === 0 && (
+                      <div className="bg-red-950/20 border border-red-500/30 p-4 rounded-lg text-xs text-red-400 space-y-2">
+                        <div className="flex gap-2 font-bold">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>Admin/Applicant Notification Mail Failed</span>
+                        </div>
+                        <p className="leading-relaxed">Error: {selectedAppDetails.application.email_notification_error || 'Mailer credentials incorrect.'}</p>
+                        <button 
+                          onClick={handleResendEmails}
+                          className="bg-red-500 text-white font-bold px-3 py-1 rounded hover:bg-red-600 transition-colors flex items-center gap-1.5"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Retry Sending Emails
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick Action bar */}
+                    <div className="flex flex-wrap gap-2 border-y border-white/5 py-4">
+                      {selectedAppDetails.application.status === 'Pending' && (
+                        <button onClick={() => handleUpdateStatus('Under Review')} className="bg-orange-500 text-white font-bold px-4 py-2 rounded text-xs">Review Profile</button>
+                      )}
+                      
+                      {['Pending', 'Under Review'].includes(selectedAppDetails.application.status) && (
+                        <>
+                          <button onClick={() => setActiveModal('interview')} className="bg-blue-500 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule Interview</button>
+                          <button onClick={() => handleUpdateStatus('Rejected')} className="bg-red-500 text-white font-bold px-4 py-2 rounded text-xs">Reject</button>
+                        </>
+                      )}
+
+                      {selectedAppDetails.application.status === 'Interview Scheduled' && (
+                        <>
+                          <button onClick={() => handleUpdateStatus('Selected')} className="bg-emerald-500 text-white font-bold px-4 py-2 rounded text-xs">Approve Selection</button>
+                          <button onClick={() => handleUpdateStatus('Rejected')} className="bg-red-500 text-white font-bold px-4 py-2 rounded text-xs">Reject Selection</button>
+                        </>
+                      )}
+
+                      {selectedAppDetails.application.status === 'Selected' && (
+                        <button onClick={() => setActiveModal('project')} className="bg-cyan-500 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /> Assign GitHub Project</button>
+                      )}
+
+                      {selectedAppDetails.application.status === 'Active Intern' && (
+                        <button onClick={handleCompleteInternship} className="bg-green-500 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"><Award className="w-3.5 h-3.5" /> Complete Internship & Issue Cert</button>
+                      )}
+
+                      {selectedAppDetails.application.status === 'Completed' && selectedAppDetails.certificate && (
+                        <a 
+                          href={`/api/internships/certificate/download/${selectedAppDetails.certificate.certificate_number}`}
+                          className="bg-green-500 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download Generated Certificate
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Detailed Data Tabs */}
+                    <div className="space-y-6 text-xs">
+                      
+                      {/* Personal */}
+                      <div className="space-y-2">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Candidate Details</h4>
+                        <div className="grid grid-cols-2 gap-4 bg-background/50 p-4 rounded-lg border border-white/5">
+                          <div><span className="text-text-muted">Email:</span> <span className="text-white font-medium block">{selectedAppDetails.application.email}</span></div>
+                          <div><span className="text-text-muted">Phone:</span> <span className="text-white font-medium block">{selectedAppDetails.application.phone}</span></div>
+                          <div><span className="text-text-muted">DOB:</span> <span className="text-white font-medium block">{selectedAppDetails.application.dob}</span></div>
+                          <div><span className="text-text-muted">Gender:</span> <span className="text-white font-medium block">{selectedAppDetails.application.gender}</span></div>
+                          <div className="col-span-2"><span className="text-text-muted">Location:</span> <span className="text-white font-medium block">{selectedAppDetails.application.city}, {selectedAppDetails.application.state}</span></div>
+                          <div className="col-span-2"><span className="text-text-muted">Address:</span> <span className="text-white font-medium block">{selectedAppDetails.application.address}</span></div>
+                        </div>
+                      </div>
+
+                      {/* Academics */}
+                      <div className="space-y-2">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Academic Background</h4>
+                        <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-2">
+                          <div><span className="text-text-muted">College Name:</span> <strong className="text-white block">{selectedAppDetails.application.college_name}</strong></div>
+                          <div><span className="text-text-muted">University Name:</span> <span className="text-white block">{selectedAppDetails.application.university_name}</span></div>
+                          <div className="grid grid-cols-3 gap-2 pt-2">
+                            <div><span className="text-text-muted">Branch:</span> <span className="text-white block">{selectedAppDetails.application.department}</span></div>
+                            <div><span className="text-text-muted">Sem/Year:</span> <span className="text-white block">Sem {selectedAppDetails.application.semester}</span></div>
+                            <div><span className="text-text-muted">CGPA/%:</span> <strong className="text-white block">{selectedAppDetails.application.cgpa}</strong></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Technical */}
+                      <div className="space-y-2">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Technical Profile</h4>
+                        <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-3">
+                          <div><span className="text-text-muted">Skills:</span> <span className="text-white block font-medium">{selectedAppDetails.application.skills}</span></div>
+                          <div><span className="text-text-muted">Technologies:</span> <span className="text-white block font-medium">{selectedAppDetails.application.technologies_known}</span></div>
+                          <div><span className="text-text-muted">Languages:</span> <span className="text-white block font-medium">{selectedAppDetails.application.programming_languages}</span></div>
+                          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5">
+                            {selectedAppDetails.application.github_profile && <div><span className="text-text-muted">GitHub:</span> <a href={selectedAppDetails.application.github_profile} target="_blank" className="text-accent block">Visit repo</a></div>}
+                            {selectedAppDetails.application.linkedin_profile && <div><span className="text-text-muted">LinkedIn:</span> <a href={selectedAppDetails.application.linkedin_profile} target="_blank" className="text-accent block">Visit profile</a></div>}
+                            {selectedAppDetails.application.portfolio_url && <div><span className="text-text-muted">Portfolio:</span> <a href={selectedAppDetails.application.portfolio_url} target="_blank" className="text-accent block">Visit url</a></div>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Questionnaire answers */}
+                      <div className="space-y-2">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Questionnaire Answers</h4>
+                        <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-4 max-h-[200px] overflow-y-auto">
+                          <div><span className="text-text-muted font-bold block mb-1">Why this internship?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_why_internship}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Best technologies?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_tech_best}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Best project?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_best_project}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Daily hours?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_hours_per_day}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Why select you?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_why_select}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Career goals?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_career_goals}</p></div>
+                        </div>
+                      </div>
+
+                      {/* File uploads download controls */}
+                      <div className="space-y-2">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Attached Documents</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedAppDetails.application.resume_path && (
+                            <button 
+                              onClick={() => downloadFile(selectedAppDetails.application.resume_path)}
+                              className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-2 rounded-lg flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5 text-accent" /> Resume
+                            </button>
+                          )}
+                          {selectedAppDetails.application.portfolio_path && (
+                            <button 
+                              onClick={() => downloadFile(selectedAppDetails.application.portfolio_path)}
+                              className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-2 rounded-lg flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5 text-accent" /> Portfolio File
+                            </button>
+                          )}
+                          {selectedAppDetails.application.docs_path && (
+                            <button 
+                              onClick={() => downloadFile(selectedAppDetails.application.docs_path)}
+                              className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-2 rounded-lg flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5 text-accent" /> Extra Docs
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* INTERVIEW CARD INFO IN PROFILE */}
+                      {selectedAppDetails.interview && (
+                        <div className="space-y-2">
+                          <h4 className="font-heading font-bold text-blue-400 uppercase tracking-wider text-[10px]">Scheduled Interview Info</h4>
+                          <div className="bg-blue-950/10 border border-blue-500/20 p-4 rounded-lg space-y-2">
+                            <div><span className="text-text-secondary">Slot:</span> <strong className="text-white">{selectedAppDetails.interview.interview_date} at {selectedAppDetails.interview.interview_time}</strong></div>
+                            <div><span className="text-text-secondary">Venue:</span> <span className="text-white">{selectedAppDetails.interview.venue}</span></div>
+                            {selectedAppDetails.interview.online_link && <div><span className="text-text-secondary">Link:</span> <a href={selectedAppDetails.interview.online_link} target="_blank" className="text-accent">{selectedAppDetails.interview.online_link}</a></div>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* INTERN CHECKLIST TASKS IN PROFILE */}
+                      {selectedAppDetails.project && (
+                        <div className="space-y-3">
+                          <h4 className="font-heading font-bold text-cyan-400 uppercase tracking-wider text-[10px]">Project Assignment & Tasks Checklist</h4>
+                          <div className="bg-cyan-950/5 border border-cyan-500/10 p-4 rounded-lg space-y-4">
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div><span className="text-text-secondary">Project:</span> <strong className="text-white block">{selectedAppDetails.project.project_name}</strong></div>
+                              <div><span className="text-text-secondary">Mentor Name:</span> <span className="text-white block">{selectedAppDetails.project.mentor_name}</span></div>
+                              <div className="col-span-2"><span className="text-text-secondary">Repository:</span> <a href={selectedAppDetails.project.repository_url} target="_blank" className="text-accent block flex items-center gap-1">{selectedAppDetails.project.assigned_repository} <ExternalLink className="w-3 h-3" /></a></div>
+                            </div>
+                            
+                            {/* Checklist tasks mapping */}
+                            <div className="space-y-2 border-t border-white/5 pt-3">
+                              <span className="text-[10px] text-text-secondary font-bold block mb-1">Checklist Progress:</span>
+                              {selectedAppDetails.project.tasks.length === 0 ? (
+                                <p className="text-[10px] text-text-muted">No custom tasks assigned.</p>
+                              ) : (
+                                selectedAppDetails.project.tasks.map((task) => (
+                                  <div key={task.id} className="flex items-start justify-between gap-2 bg-background/50 p-2 rounded">
+                                    <div className="flex gap-2 items-start">
+                                      {task.status === 'Completed' ? (
+                                        <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                                      ) : (
+                                        <Square className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
+                                      )}
+                                      <div>
+                                        <p className="text-white font-medium">{task.task}</p>
+                                        <span className="text-[9px] text-text-muted">Deadline: {task.deadline}</span>
+                                      </div>
+                                    </div>
+                                    <button 
+                                      onClick={() => handleDeleteTask(task.id)}
+                                      className="text-red-400 hover:text-red-500 p-0.5"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+
+                              {/* Task Insertion input */}
+                              {selectedAppDetails.application.status === 'Active Intern' && (
+                                <div className="space-y-2 pt-2 border-t border-white/5">
+                                  <input 
+                                    type="text" value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)}
+                                    placeholder="Add new task description..."
+                                    className="w-full bg-background border border-white/10 rounded px-2 py-1 text-[11px] text-white"
+                                  />
+                                  <div className="flex gap-2">
+                                    <input 
+                                      type="date" value={newTaskDeadline} onChange={(e) => setNewTaskDeadline(e.target.value)}
+                                      className="flex-1 bg-background border border-white/10 rounded px-2 py-1 text-[11px] text-white"
+                                    />
+                                    <button 
+                                      onClick={handleAddTask}
+                                      className="bg-cyan-500 text-white font-bold px-3 py-1 rounded text-[11px] flex items-center gap-1"
+                                    >
+                                      <Plus className="w-3 h-3" /> Add Task
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Notes Section */}
+                      <div className="space-y-2 border-t border-white/5 pt-4">
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Internal Admin Notes</h4>
+                        <textarea 
+                          rows={3} value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)}
+                          placeholder="Add details, evaluation results, qualifications..."
+                          className="w-full bg-background border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none resize-none"
+                        />
+                        <button 
+                          onClick={handleSaveNotes} disabled={isSavingNotes}
+                          className="bg-accent text-background font-bold px-4 py-2 rounded text-xs flex items-center gap-1.5"
+                        >
+                          {isSavingNotes ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                          Save Candidate Notes
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        </div>
+
+        {/* =========================================================================
+           ACTION MODALS (Interview and Project Assignment Panels)
+           ========================================================================= */}
+        
+        {/* INTERVIEW MODAL */}
+        {activeModal === 'interview' && selectedApp && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-card max-w-md w-full border border-white/10 p-6 space-y-4">
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <h3 className="font-heading font-bold text-white text-base">Schedule Interview</h3>
+                <button onClick={() => setActiveModal(null)} className="text-text-secondary hover:text-white font-bold">&times;</button>
+              </div>
+
+              <form onSubmit={handleScheduleInterview} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Interview Date *</label>
+                  <input 
+                    type="date" required value={interviewForm.interview_date} 
+                    onChange={(e) => setInterviewForm({...interviewForm, interview_date: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Interview Time *</label>
+                  <input 
+                    type="text" required placeholder="e.g. 11:30 AM" value={interviewForm.interview_time} 
+                    onChange={(e) => setInterviewForm({...interviewForm, interview_time: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Venue / Office *</label>
+                  <input 
+                    type="text" required placeholder="e.g. Online (Zoom Link Below) or Davanagere Office" value={interviewForm.venue} 
+                    onChange={(e) => setInterviewForm({...interviewForm, venue: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Online Meeting Link (Optional)</label>
+                  <input 
+                    type="url" placeholder="https://zoom.us/j/meeting-id" value={interviewForm.online_link} 
+                    onChange={(e) => setInterviewForm({...interviewForm, online_link: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Special Candidate Instructions</label>
+                  <textarea 
+                    rows={2} placeholder="Please carry your resume. Join the zoom room 5 minutes before scheduled slot." value={interviewForm.instructions} 
+                    onChange={(e) => setInterviewForm({...interviewForm, instructions: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
+                  <button type="button" onClick={() => setActiveModal(null)} className="px-4 py-2 bg-white/5 border border-white/10 rounded text-white font-bold">Cancel</button>
+                  <button type="submit" disabled={isUpdatingStatus} className="px-5 py-2 bg-blue-500 rounded text-white font-bold flex items-center gap-1.5">
+                    {isUpdatingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Save Schedule & Send Invitation
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ASSIGN PROJECT MODAL */}
+        {activeModal === 'project' && selectedApp && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-card max-w-md w-full border border-white/10 p-6 space-y-4">
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <h3 className="font-heading font-bold text-white text-base">Assign Project & Activate Internship</h3>
+                <button onClick={() => setActiveModal(null)} className="text-text-secondary hover:text-white font-bold">&times;</button>
+              </div>
+
+              <form onSubmit={handleAssignProject} className="space-y-4 text-xs">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">GitHub Username *</label>
+                    <input 
+                      type="text" required placeholder="github_username" value={projectForm.github_username} 
+                      onChange={(e) => setProjectForm({...projectForm, github_username: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Mentor Name *</label>
+                    <input 
+                      type="text" required placeholder="Senior Dev Name" value={projectForm.mentor_name} 
+                      onChange={(e) => setProjectForm({...projectForm, mentor_name: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Project Name *</label>
+                  <input 
+                    type="text" required placeholder="e.g. Manchester Portal Frontend" value={projectForm.project_name} 
+                    onChange={(e) => setProjectForm({...projectForm, project_name: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Assigned Repository *</label>
+                    <input 
+                      type="text" required placeholder="e.g. manchester-portal" value={projectForm.assigned_repository} 
+                      onChange={(e) => setProjectForm({...projectForm, assigned_repository: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Repository URL *</label>
+                    <input 
+                      type="url" required placeholder="https://github.com/..." value={projectForm.repository_url} 
+                      onChange={(e) => setProjectForm({...projectForm, repository_url: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Start Date *</label>
+                    <input 
+                      type="date" required value={projectForm.start_date} 
+                      onChange={(e) => setProjectForm({...projectForm, start_date: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">End Date *</label>
+                    <input 
+                      type="date" required value={projectForm.end_date} 
+                      onChange={(e) => setProjectForm({...projectForm, end_date: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
+                  <button type="button" onClick={() => setActiveModal(null)} className="px-4 py-2 bg-white/5 border border-white/10 rounded text-white font-bold">Cancel</button>
+                  <button type="submit" disabled={isUpdatingStatus} className="px-5 py-2 bg-cyan-500 rounded text-white font-bold flex items-center gap-1.5">
+                    {isUpdatingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Confirm Activation
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+      </section>
+    </main>
+  )
+}

@@ -9,6 +9,14 @@ import Services from './pages/Services'
 import Contact from './pages/Contact'
 import HeroDataNetwork from './hero-variants/HeroDataNetwork'
 
+// Internship Portal Pages Imports
+import InternshipsLanding from './pages/InternshipsLanding'
+import InternshipApply from './pages/InternshipApply'
+import InternshipStatus from './pages/InternshipStatus'
+import AdminInternships from './pages/AdminInternships'
+import InternDashboard from './pages/InternDashboard'
+import VerifyCertificate from './pages/VerifyCertificate'
+
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
@@ -74,6 +82,55 @@ function App() {
             element={
               <AnimatedPage>
                 <Contact />
+              </AnimatedPage>
+            }
+          />
+          {/* Internship Portal Routes */}
+          <Route
+            path="/internships"
+            element={
+              <AnimatedPage>
+                <InternshipsLanding />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/apply"
+            element={
+              <AnimatedPage>
+                <InternshipApply />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/status"
+            element={
+              <AnimatedPage>
+                <InternshipStatus />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/admin/internships"
+            element={
+              <AnimatedPage>
+                <AdminInternships />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/dashboard"
+            element={
+              <AnimatedPage>
+                <InternDashboard />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/verify-certificate/:certificateNumber"
+            element={
+              <AnimatedPage>
+                <VerifyCertificate />
               </AnimatedPage>
             }
           />

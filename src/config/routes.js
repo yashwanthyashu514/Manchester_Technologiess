@@ -11,6 +11,9 @@ export const STATIC_ROUTES = [
     { path: '/services', changefreq: 'monthly', priority: 0.8 },
     { path: '/about', changefreq: 'monthly', priority: 0.8 },
     { path: '/contact', changefreq: 'monthly', priority: 0.8 },
+    { path: '/internships', changefreq: 'weekly', priority: 0.9 },
+    { path: '/internships/apply', changefreq: 'monthly', priority: 0.8 },
+    { path: '/internships/status', changefreq: 'weekly', priority: 0.8 },
 ];
 
 /**

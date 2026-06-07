@@ -46,15 +46,21 @@ export default function InternshipApply() {
     city: '',
     state: '',
     address: '',
+    country: '',
     // Academic Details
     college_name: '',
     university_name: '',
-    department: '',
+    degree: '',
+    department: '', // Will store Branch/Specialization
+    branch: '',      // Branch duplicate to align with schema
     semester: '',
     graduation_year: '',
     cgpa: '',
     // Professional Details
     skills: '',
+    certifications: '',
+    previous_experience: '', // 'Yes' or 'No'
+    experience_description: '',
     technologies_known: '',
     programming_languages: '',
     github_profile: '',
@@ -71,6 +77,7 @@ export default function InternshipApply() {
     q_hours_per_day: '',
     q_why_select: '',
     q_career_goals: '',
+    additional_comments: '',
     // Confidentiality Checkboxes
     conf1: false,
     conf2: false,
@@ -94,7 +101,14 @@ export default function InternshipApply() {
   // Field change handlers
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      // Keep department and branch synchronized
+      if (name === 'department') {
+        updated.branch = value;
+      }
+      return updated;
+    })
   }
 
   const handleCheckboxChange = (e) => {
@@ -108,8 +122,8 @@ export default function InternshipApply() {
     const file = selectedFiles[0]
     if (!file) return
 
-    // Limit to 5MB
-    const maxSize = 5 * 1024 * 1024
+    // Limit to 10MB
+    const maxSize = 10 * 1024 * 1024
     const allowedExtensions = ['.pdf', '.doc', '.docx']
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
 
@@ -120,7 +134,7 @@ export default function InternshipApply() {
     }
 
     if (file.size > maxSize) {
-      setFileErrors(prev => ({ ...prev, [name]: 'File size exceeds 5MB limit.' }))
+      setFileErrors(prev => ({ ...prev, [name]: 'File size exceeds 10MB limit.' }))
       setFiles(prev => ({ ...prev, [name]: null }))
       return
     }
@@ -145,9 +159,9 @@ export default function InternshipApply() {
   // Validations per step
   const validateStep = (s) => {
     if (s === 1) {
-      const { full_name, email, phone, dob, gender, city, state, address } = formData
-      if (!full_name || !email || !phone || !dob || !gender || !city || !state || !address) {
-        alert('Please fill in all personal details.')
+      const { full_name, email, phone, dob, gender, city, state, address, country } = formData
+      if (!full_name || !email || !phone || !dob || !gender || !city || !state || !address || !country) {
+        alert('Please fill in all personal details including Country.')
         return false
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -158,18 +172,26 @@ export default function InternshipApply() {
     }
     
     if (s === 2) {
-      const { college_name, university_name, department, semester, graduation_year, cgpa } = formData
-      if (!college_name || !university_name || !department || !semester || !graduation_year || !cgpa) {
-        alert('Please fill in all academic details.')
+      const { college_name, university_name, degree, department, semester, graduation_year, cgpa } = formData
+      if (!college_name || !university_name || !degree || !department || !semester || !graduation_year || !cgpa) {
+        alert('Please fill in all academic details including Degree and Branch/Specialization.')
         return false
       }
       return true
     }
 
     if (s === 3) {
-      const { skills, technologies_known, programming_languages } = formData
-      if (!skills || !technologies_known || !programming_languages) {
-        alert('Please fill in all technical profile details.')
+      const { skills, previous_experience, experience_description } = formData
+      if (!skills) {
+        alert('Please list your skills.')
+        return false
+      }
+      if (!previous_experience) {
+        alert('Please select whether you have previous internship experience.')
+        return false
+      }
+      if (previous_experience === 'Yes' && !experience_description) {
+        alert('Please describe your previous experience.')
         return false
       }
       return true
@@ -272,7 +294,7 @@ export default function InternshipApply() {
               <CheckCircle2 className="w-16 h-16 text-accent mx-auto mb-6" />
               <h2 className="heading-md mb-2 text-white">Application Submitted Successfully!</h2>
               <p className="body-md text-text-secondary mb-8">
-                Your application has been received. Our review committee will audit your credentials.
+                Thank you for applying for an internship at Manchester Technologies. Your application has been submitted successfully. Our team will review your profile and contact you if shortlisted.
               </p>
               
               <div className="bg-background/80 border border-white/5 p-6 rounded-xl mb-8">
@@ -428,6 +450,15 @@ export default function InternshipApply() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Country *</label>
+                      <input 
+                        type="text" name="country" required value={formData.country} onChange={handleChange}
+                        className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
+                        placeholder="India"
+                      />
+                    </div>
+
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Full Residential Address *</label>
                       <textarea 
@@ -465,7 +496,16 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Department / Branch *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Degree *</label>
+                      <input 
+                        type="text" name="degree" required value={formData.degree} onChange={handleChange}
+                        className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
+                        placeholder="e.g. B.E. / B.Tech / MCA / BCA"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Branch / Specialization *</label>
                       <input 
                         type="text" name="department" required value={formData.department} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
@@ -474,11 +514,11 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Current Semester *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Current Semester / Year *</label>
                       <input 
-                        type="number" name="semester" required min={1} max={8} value={formData.semester} onChange={handleChange}
+                        type="text" name="semester" required value={formData.semester} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
-                        placeholder="6"
+                        placeholder="e.g. 6th Semester / 3rd Year"
                       />
                     </div>
 
@@ -519,18 +559,50 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Technologies Known *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Certifications</label>
                       <input 
-                        type="text" name="technologies_known" required value={formData.technologies_known} onChange={handleChange}
+                        type="text" name="certifications" value={formData.certifications} onChange={handleChange}
+                        className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
+                        placeholder="e.g. AWS Certified Developer, Google UX Design Certificate"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Previous Internship Experience *</label>
+                      <select 
+                        name="previous_experience" required value={formData.previous_experience} onChange={handleChange}
+                        className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
+                      >
+                        <option value="" className="bg-secondary">Select Option</option>
+                        <option value="Yes" className="bg-secondary">Yes</option>
+                        <option value="No" className="bg-secondary">No</option>
+                      </select>
+                    </div>
+
+                    {formData.previous_experience === 'Yes' && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden">
+                        <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Experience Description *</label>
+                        <textarea 
+                          name="experience_description" required rows={3} value={formData.experience_description} onChange={handleChange}
+                          className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
+                          placeholder="Please describe your previous internship role, responsibilities, and key accomplishments..."
+                        />
+                      </motion.div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Technologies Known</label>
+                      <input 
+                        type="text" name="technologies_known" value={formData.technologies_known} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
                         placeholder="Tailwind CSS, Express.js, MongoDB, Vite"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Programming Languages Known *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Programming Languages Known</label>
                       <input 
-                        type="text" name="programming_languages" required value={formData.programming_languages} onChange={handleChange}
+                        type="text" name="programming_languages" value={formData.programming_languages} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
                         placeholder="JavaScript, Python, C++, Java"
                       />
@@ -571,16 +643,16 @@ export default function InternshipApply() {
               {/* STEP 4: INTERNSHIP DETAILS */}
               {step === 4 && (
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-                  <h2 className="heading-md border-l-4 border-accent pl-3 text-white">Internship Preferences</h2>
+                  <h2 className="heading-md border-l-4 border-accent pl-3 text-white">Internship Details</h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Preferred Domain *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Role Applying For *</label>
                       <select 
                         name="preferred_domain" required value={formData.preferred_domain} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
                       >
-                        <option value="" className="bg-secondary">Select Domain</option>
+                        <option value="" className="bg-secondary">Select Role</option>
                         {domains.map(d => (
                           <option key={d} value={d} className="bg-secondary">{d}</option>
                         ))}
@@ -588,7 +660,7 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Preferred Duration *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Internship Duration *</label>
                       <select 
                         name="preferred_duration" required value={formData.preferred_duration} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
@@ -617,7 +689,7 @@ export default function InternshipApply() {
                   <h2 className="heading-md border-l-4 border-accent pl-3 text-white">Upload Section</h2>
                   
                   <p className="text-xs text-text-muted">
-                    Accepted formats: PDF, DOC, DOCX. Max file size: 5MB.
+                    Accepted formats: PDF, DOC, DOCX. Max file size: 10MB.
                   </p>
 
                   <div className="space-y-6">
@@ -668,7 +740,7 @@ export default function InternshipApply() {
                   
                   <div className="space-y-6">
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Why do you want this internship? *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Why do you want to join Manchester Technologies? *</label>
                       <textarea 
                         name="q_why_internship" required rows={3} value={formData.q_why_internship} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
@@ -676,7 +748,7 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">What technologies do you know best? *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">What are your key skills? *</label>
                       <textarea 
                         name="q_tech_best" required rows={3} value={formData.q_tech_best} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
@@ -684,7 +756,7 @@ export default function InternshipApply() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Describe your best project. *</label>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Describe a project you have worked on. *</label>
                       <textarea 
                         name="q_best_project" required rows={3} value={formData.q_best_project} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
@@ -713,6 +785,15 @@ export default function InternshipApply() {
                       <textarea 
                         name="q_career_goals" required rows={3} value={formData.q_career_goals} onChange={handleChange}
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Additional Comments</label>
+                      <textarea 
+                        name="additional_comments" rows={3} value={formData.additional_comments} onChange={handleChange}
+                        className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors resize-none"
+                        placeholder="Any additional information you would like to share..."
                       />
                     </div>
                   </div>

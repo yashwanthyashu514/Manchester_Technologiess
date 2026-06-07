@@ -175,9 +175,36 @@ export const initDb = async () => {
       ip_address TEXT,
       notes TEXT,
       email_notification_sent INTEGER DEFAULT 0,
-      email_notification_error TEXT
+      email_notification_error TEXT,
+      country TEXT,
+      degree TEXT,
+      branch TEXT,
+      certifications TEXT,
+      previous_experience TEXT,
+      experience_description TEXT,
+      additional_comments TEXT
     )
   `);
+
+  // Dynamic migration for existing databases
+  const newColumns = [
+    { name: 'country', type: 'TEXT' },
+    { name: 'degree', type: 'TEXT' },
+    { name: 'branch', type: 'TEXT' },
+    { name: 'certifications', type: 'TEXT' },
+    { name: 'previous_experience', type: 'TEXT' },
+    { name: 'experience_description', type: 'TEXT' },
+    { name: 'additional_comments', type: 'TEXT' }
+  ];
+
+  for (const col of newColumns) {
+    try {
+      await dbRun(`ALTER TABLE applications ADD COLUMN ${col.name} ${col.type}`);
+      console.log(`✅ Added column ${col.name} to applications table.`);
+    } catch (err) {
+      // Column already exists or error, safe to ignore
+    }
+  }
 
   // Interviews Table
   await runInitQuery(`

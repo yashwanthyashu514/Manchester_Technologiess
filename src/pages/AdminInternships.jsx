@@ -50,6 +50,7 @@ export default function AdminInternships() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterDuration, setFilterDuration] = useState('')
   const [filterCollege, setFilterCollege] = useState('')
+  const [filterDate, setFilterDate] = useState('')
 
   // Action / Form Modals States
   const [activeModal, setActiveModal] = useState(null) // 'interview' | 'project'
@@ -104,7 +105,7 @@ export default function AdminInternships() {
     if (isAdmin) {
       fetchApplications()
     }
-  }, [searchTerm, filterDomain, filterStatus, filterDuration, filterCollege])
+  }, [searchTerm, filterDomain, filterStatus, filterDuration, filterCollege, filterDate])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -167,6 +168,7 @@ export default function AdminInternships() {
       if (filterStatus) queryParams.append('status', filterStatus)
       if (filterDuration) queryParams.append('duration', filterDuration)
       if (filterCollege) queryParams.append('college', filterCollege)
+      if (filterDate) queryParams.append('date', filterDate)
 
       const res = await fetch(`/api/admin/applications?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -426,6 +428,92 @@ export default function AdminInternships() {
     }
   }
 
+  // Delete Application
+  const handleDeleteApplication = async (appId) => {
+    if (!confirm('Are you sure you want to permanently delete this application? This will remove all database records and physically delete any uploaded files.')) return;
+    
+    try {
+      const res = await fetch(`/api/admin/applications/${appId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+      if (res.ok) {
+        alert('Application deleted successfully.');
+        setSelectedApp(null);
+        setSelectedAppDetails(null);
+        fetchMetrics();
+        fetchApplications();
+      } else {
+        alert(result.error || 'Failed to delete application.');
+      }
+    } catch (e) {
+      alert('Error calling delete application endpoint.');
+    }
+  };
+
+  // Export applications to CSV
+  const handleExportCSV = () => {
+    if (applications.length === 0) {
+      alert('No applications to export.');
+      return;
+    }
+    
+    // Define CSV headers including new fields
+    const headers = [
+      'Application ID', 'Full Name', 'Email', 'Mobile Number', 'Date of Birth', 'Gender',
+      'Address', 'City', 'State', 'Country', 'College Name', 'Degree', 'Branch/Specialization',
+      'Semester', 'CGPA/Percentage', 'Skills', 'Certifications', 'Previous Experience',
+      'Experience Description', 'Role Applied For', 'Available Start Date', 'Duration',
+      'Why Join', 'Key Skills', 'Project Description', 'Additional Comments', 'Status', 'Submission Date'
+    ];
+    
+    // Map rows
+    const csvRows = [
+      headers.join(','),
+      ...applications.map(app => [
+        `"${app.application_id || ''}"`,
+        `"${(app.full_name || '').replace(/"/g, '""')}"`,
+        `"${app.email || ''}"`,
+        `"${app.phone || ''}"`,
+        `"${app.dob || ''}"`,
+        `"${app.gender || ''}"`,
+        `"${(app.address || '').replace(/"/g, '""')}"`,
+        `"${(app.city || '').replace(/"/g, '""')}"`,
+        `"${(app.state || '').replace(/"/g, '""')}"`,
+        `"${(app.country || '').replace(/"/g, '""')}"`,
+        `"${(app.college_name || '').replace(/"/g, '""')}"`,
+        `"${(app.degree || '').replace(/"/g, '""')}"`,
+        `"${(app.branch || '').replace(/"/g, '""')}"`,
+        `"${app.semester || ''}"`,
+        `"${app.cgpa || ''}"`,
+        `"${(app.skills || '').replace(/"/g, '""')}"`,
+        `"${(app.certifications || '').replace(/"/g, '""')}"`,
+        `"${app.previous_experience || ''}"`,
+        `"${(app.experience_description || '').replace(/"/g, '""')}"`,
+        `"${app.preferred_domain || ''}"`,
+        `"${app.start_date || ''}"`,
+        `"${app.preferred_duration || ''}"`,
+        `"${(app.q_why_internship || '').replace(/"/g, '""')}"`,
+        `"${(app.q_tech_best || '').replace(/"/g, '""')}"`,
+        `"${(app.q_best_project || '').replace(/"/g, '""')}"`,
+        `"${(app.additional_comments || '').replace(/"/g, '""')}"`,
+        `"${app.status || ''}"`,
+        `"${app.created_at || ''}"`
+      ].join(','))
+    ];
+    
+    // Download CSV
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `internship_applications_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Secure File Downloader (Injects JWT Header)
   const downloadFile = async (filepath) => {
     if (!filepath) return
@@ -562,8 +650,8 @@ export default function AdminInternships() {
 
         {/* SEARCH AND FILTERS TOOLBAR */}
         <div className="glass-card p-5 border border-white/5">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="relative md:col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-4 items-center">
+            <div className="relative md:col-span-3">
               <Search className="w-4 h-4 text-text-muted absolute left-3 top-3.5" />
               <input 
                 type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
@@ -572,7 +660,7 @@ export default function AdminInternships() {
               />
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <select 
                 value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}
                 className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
@@ -584,7 +672,7 @@ export default function AdminInternships() {
               </select>
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <select 
                 value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
                 className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
@@ -596,7 +684,7 @@ export default function AdminInternships() {
               </select>
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <select 
                 value={filterDuration} onChange={(e) => setFilterDuration(e.target.value)}
                 className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
@@ -606,6 +694,24 @@ export default function AdminInternships() {
                 <option value="45 Days">45 Days</option>
                 <option value="60 Days">60 Days</option>
               </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <input 
+                type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
+                title="Filter by Submission Date"
+                className="w-full bg-background/60 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:border-accent focus:outline-none"
+              />
+            </div>
+
+            <div className="md:col-span-1">
+              <button 
+                type="button" onClick={handleExportCSV}
+                title="Export filtered Roster to CSV"
+                className="w-full bg-accent hover:bg-accent-light text-background font-bold p-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download className="w-4 h-4" /> Export
+              </button>
             </div>
           </div>
         </div>
@@ -621,20 +727,24 @@ export default function AdminInternships() {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-white/5 bg-background/40 text-text-secondary uppercase font-semibold">
                     <th className="p-4">App ID</th>
-                    <th className="p-4">Candidate Name</th>
-                    <th className="p-4">Domain / Duration</th>
+                    <th className="p-4">Applicant Name</th>
+                    <th className="p-4">Email</th>
+                    <th className="p-4">Mobile Number</th>
+                    <th className="p-4">College Name</th>
+                    <th className="p-4">Applied Role</th>
+                    <th className="p-4">Submission Date</th>
+                    <th className="p-4">Resume</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4">Mail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {applications.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-text-muted">No applications found matching search filters.</td>
+                      <td colSpan={9} className="p-8 text-center text-text-muted">No applications found matching search filters.</td>
                     </tr>
                   ) : (
                     applications.map((app) => (
@@ -644,25 +754,31 @@ export default function AdminInternships() {
                         className={`cursor-pointer hover:bg-white/5 transition-colors ${selectedApp?.id === app.id ? 'bg-accent/5' : ''}`}
                       >
                         <td className="p-4 font-bold text-white">{app.application_id}</td>
+                        <td className="p-4 font-bold text-white">{app.full_name}</td>
+                        <td className="p-4">{app.email}</td>
+                        <td className="p-4">{app.phone}</td>
+                        <td className="p-4 text-text-secondary">{app.college_name}</td>
+                        <td className="p-4 text-white font-medium">{app.preferred_domain}</td>
+                        <td className="p-4 text-text-secondary">{app.created_at ? app.created_at.split('T')[0] : 'N/A'}</td>
                         <td className="p-4">
-                          <div className="font-bold text-white">{app.full_name}</div>
-                          <div className="text-[10px] text-text-muted mt-0.5">{app.college_name}</div>
-                        </td>
-                        <td className="p-4">
-                          <div className="text-white">{app.preferred_domain}</div>
-                          <div className="text-[10px] text-text-muted mt-0.5">{app.preferred_duration}</div>
+                          {app.resume_path ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadFile(app.resume_path);
+                              }}
+                              className="bg-accent/10 hover:bg-accent/25 border border-accent/30 text-accent font-bold px-2.5 py-1 rounded transition-colors text-[10px] flex items-center gap-1"
+                            >
+                              <Download className="w-3 h-3" /> Download
+                            </button>
+                          ) : (
+                            <span className="text-text-muted">N/A</span>
+                          )}
                         </td>
                         <td className="p-4">
                           <span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${getStatusBadgeColor(app.status)}`}>
                             {app.status}
                           </span>
-                        </td>
-                        <td className="p-4">
-                          {app.email_notification_sent ? (
-                            <span className="text-green-500 font-bold">Sent</span>
-                          ) : (
-                            <span className="text-red-400 font-bold" title={app.email_notification_error || 'SMTP Error'}>Failed</span>
-                          )}
                         </td>
                       </tr>
                     ))
@@ -761,6 +877,13 @@ export default function AdminInternships() {
                           <Download className="w-3.5 h-3.5" /> Download Generated Certificate
                         </a>
                       )}
+
+                      <button 
+                        onClick={() => handleDeleteApplication(selectedAppDetails.application.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete Application
+                      </button>
                     </div>
 
                     {/* Detailed Data Tabs */}
@@ -774,7 +897,7 @@ export default function AdminInternships() {
                           <div><span className="text-text-muted">Phone:</span> <span className="text-white font-medium block">{selectedAppDetails.application.phone}</span></div>
                           <div><span className="text-text-muted">DOB:</span> <span className="text-white font-medium block">{selectedAppDetails.application.dob}</span></div>
                           <div><span className="text-text-muted">Gender:</span> <span className="text-white font-medium block">{selectedAppDetails.application.gender}</span></div>
-                          <div className="col-span-2"><span className="text-text-muted">Location:</span> <span className="text-white font-medium block">{selectedAppDetails.application.city}, {selectedAppDetails.application.state}</span></div>
+                          <div className="col-span-2"><span className="text-text-muted">Location:</span> <span className="text-white font-medium block">{selectedAppDetails.application.city}, {selectedAppDetails.application.state}, {selectedAppDetails.application.country || 'N/A'}</span></div>
                           <div className="col-span-2"><span className="text-text-muted">Address:</span> <span className="text-white font-medium block">{selectedAppDetails.application.address}</span></div>
                         </div>
                       </div>
@@ -785,9 +908,10 @@ export default function AdminInternships() {
                         <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-2">
                           <div><span className="text-text-muted">College Name:</span> <strong className="text-white block">{selectedAppDetails.application.college_name}</strong></div>
                           <div><span className="text-text-muted">University Name:</span> <span className="text-white block">{selectedAppDetails.application.university_name}</span></div>
+                          <div><span className="text-text-muted">Degree:</span> <span className="text-white block font-medium">{selectedAppDetails.application.degree || 'N/A'}</span></div>
                           <div className="grid grid-cols-3 gap-2 pt-2">
-                            <div><span className="text-text-muted">Branch:</span> <span className="text-white block">{selectedAppDetails.application.department}</span></div>
-                            <div><span className="text-text-muted">Sem/Year:</span> <span className="text-white block">Sem {selectedAppDetails.application.semester}</span></div>
+                            <div><span className="text-text-muted">Branch/Spec:</span> <span className="text-white block font-medium">{selectedAppDetails.application.branch || selectedAppDetails.application.department || 'N/A'}</span></div>
+                            <div><span className="text-text-muted">Sem/Year:</span> <span className="text-white block">{selectedAppDetails.application.semester}</span></div>
                             <div><span className="text-text-muted">CGPA/%:</span> <strong className="text-white block">{selectedAppDetails.application.cgpa}</strong></div>
                           </div>
                         </div>
@@ -795,11 +919,16 @@ export default function AdminInternships() {
 
                       {/* Technical */}
                       <div className="space-y-2">
-                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Technical Profile</h4>
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Technical & Professional Profile</h4>
                         <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-3">
                           <div><span className="text-text-muted">Skills:</span> <span className="text-white block font-medium">{selectedAppDetails.application.skills}</span></div>
-                          <div><span className="text-text-muted">Technologies:</span> <span className="text-white block font-medium">{selectedAppDetails.application.technologies_known}</span></div>
-                          <div><span className="text-text-muted">Languages:</span> <span className="text-white block font-medium">{selectedAppDetails.application.programming_languages}</span></div>
+                          <div><span className="text-text-muted">Certifications:</span> <span className="text-white block font-medium">{selectedAppDetails.application.certifications || 'N/A'}</span></div>
+                          <div><span className="text-text-muted">Previous Experience:</span> <span className="text-white block font-medium">{selectedAppDetails.application.previous_experience || 'N/A'}</span></div>
+                          {selectedAppDetails.application.previous_experience === 'Yes' && (
+                            <div><span className="text-text-muted">Experience Description:</span> <p className="text-white leading-relaxed bg-white/5 p-2 rounded mt-1">{selectedAppDetails.application.experience_description}</p></div>
+                          )}
+                          <div><span className="text-text-muted">Technologies:</span> <span className="text-white block font-medium">{selectedAppDetails.application.technologies_known || 'N/A'}</span></div>
+                          <div><span className="text-text-muted">Languages:</span> <span className="text-white block font-medium">{selectedAppDetails.application.programming_languages || 'N/A'}</span></div>
                           <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5">
                             {selectedAppDetails.application.github_profile && <div><span className="text-text-muted">GitHub:</span> <a href={selectedAppDetails.application.github_profile} target="_blank" className="text-accent block">Visit repo</a></div>}
                             {selectedAppDetails.application.linkedin_profile && <div><span className="text-text-muted">LinkedIn:</span> <a href={selectedAppDetails.application.linkedin_profile} target="_blank" className="text-accent block">Visit profile</a></div>}
@@ -810,14 +939,17 @@ export default function AdminInternships() {
 
                       {/* Questionnaire answers */}
                       <div className="space-y-2">
-                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Questionnaire Answers</h4>
+                        <h4 className="font-heading font-bold text-accent uppercase tracking-wider text-[10px]">Questionnaire & Comments</h4>
                         <div className="bg-background/50 p-4 rounded-lg border border-white/5 space-y-4 max-h-[200px] overflow-y-auto">
-                          <div><span className="text-text-muted font-bold block mb-1">Why this internship?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_why_internship}</p></div>
-                          <div><span className="text-text-muted font-bold block mb-1">Best technologies?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_tech_best}</p></div>
-                          <div><span className="text-text-muted font-bold block mb-1">Best project?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_best_project}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Why join Manchester Technologies?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_why_internship}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Key Skills:</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_tech_best}</p></div>
+                          <div><span className="text-text-muted font-bold block mb-1">Project Description:</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_best_project}</p></div>
                           <div><span className="text-text-muted font-bold block mb-1">Daily hours?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_hours_per_day}</p></div>
                           <div><span className="text-text-muted font-bold block mb-1">Why select you?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_why_select}</p></div>
                           <div><span className="text-text-muted font-bold block mb-1">Career goals?</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.q_career_goals}</p></div>
+                          {selectedAppDetails.application.additional_comments && (
+                            <div><span className="text-text-muted font-bold block mb-1">Additional Comments:</span> <p className="text-white leading-relaxed">{selectedAppDetails.application.additional_comments}</p></div>
+                          )}
                         </div>
                       </div>
 

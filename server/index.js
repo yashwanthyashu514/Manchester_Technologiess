@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -74,7 +75,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
 // API Routes
@@ -275,7 +276,8 @@ app.post('/api/internships/apply', upload.fields([
         preferred_domain, preferred_duration, start_date, resume_path, portfolio_path, docs_path,
         q_why_internship, q_tech_best, q_best_project, q_hours_per_day, q_why_select, q_career_goals,
         conf_agreement_1, conf_agreement_2, conf_agreement_3, conf_agreement_4,
-        created_at, ip_address, status
+        created_at, ip_address, status,
+        country, degree, branch, certifications, previous_experience, experience_description, additional_comments
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
@@ -283,17 +285,19 @@ app.post('/api/internships/apply', upload.fields([
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         1, 1, 1, 1,
-        ?, ?, 'Pending'
+        ?, ?, 'Pending',
+        ?, ?, ?, ?, ?, ?, ?
       )
     `;
 
     const params = [
       application_id, data.full_name, data.email, data.phone, data.dob, data.gender, data.city, data.state, data.address,
-      data.college_name, data.university_name, data.department, data.semester, parseInt(data.graduation_year), data.cgpa,
+      data.college_name, data.university_name, data.department, data.semester, parseInt(data.graduation_year) || 0, data.cgpa,
       data.skills, data.technologies_known, data.programming_languages, data.github_profile, data.linkedin_profile, data.portfolio_url,
       data.preferred_domain, data.preferred_duration, data.start_date, resumePath, portfolioPath, docsPath,
       data.q_why_internship, data.q_tech_best, data.q_best_project, data.q_hours_per_day, data.q_why_select, data.q_career_goals,
-      created_at, ipAddress
+      created_at, ipAddress,
+      data.country, data.degree, data.branch, data.certifications, data.previous_experience, data.experience_description, data.additional_comments
     ];
 
     await dbRun(sql, params);
@@ -413,7 +417,6 @@ app.post('/api/auth/admin-login', async (req, res) => {
     }
 
     // Synchronous comparison using bcryptjs since standard
-    import bcrypt from 'bcryptjs';
     const isMatch = bcrypt.compareSync(password, admin.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials.' });
@@ -583,9 +586,9 @@ app.get('/api/admin/metrics', authenticate, requireAdmin, async (req, res) => {
 // Get Applications List with Search & Filtering
 app.get('/api/admin/applications', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { search, domain, status, duration, college } = req.query;
+    const { search, domain, status, duration, college, date } = req.query;
     
-    let sql = `SELECT id, application_id, full_name, email, phone, college_name, preferred_domain, preferred_duration, status, created_at, email_notification_sent, email_notification_error FROM applications WHERE 1=1`;
+    let sql = `SELECT id, application_id, full_name, email, phone, college_name, preferred_domain, preferred_duration, status, created_at, email_notification_sent, email_notification_error, country, degree, branch, certifications, previous_experience, experience_description, additional_comments, resume_path FROM applications WHERE 1=1`;
     const params = [];
 
     if (search) {
@@ -612,6 +615,11 @@ app.get('/api/admin/applications', authenticate, requireAdmin, async (req, res) 
     if (college) {
       sql += ` AND college_name LIKE ?`;
       params.push(`%${college}%`);
+    }
+
+    if (date) {
+      sql += ` AND created_at LIKE ?`;
+      params.push(`${date}%`);
     }
 
     sql += ` ORDER BY created_at DESC`;
@@ -657,6 +665,43 @@ app.get('/api/admin/applications/:id', authenticate, requireAdmin, async (req, r
   } catch (error) {
     console.error('Fetch full profile failed:', error);
     return res.status(500).json({ error: 'Failed to fetch candidate profile.' });
+  }
+});
+
+// Delete Application (Admin only)
+app.delete('/api/admin/applications/:id', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const appRecord = await dbGet(`SELECT * FROM applications WHERE id = ?`, [id]);
+    if (!appRecord) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+    
+    // Delete files
+    const filesToDelete = [appRecord.resume_path, appRecord.portfolio_path, appRecord.docs_path];
+    filesToDelete.forEach(filePath => {
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`🗑️ Deleted file: ${filePath}`);
+        } catch (e) {
+          console.error(`Failed to delete file: ${filePath}`, e);
+        }
+      }
+    });
+
+    // Delete related records
+    await dbRun(`DELETE FROM interviews WHERE application_id = ?`, [appRecord.application_id]);
+    await dbRun(`DELETE FROM project_assignments WHERE application_id = ?`, [appRecord.application_id]);
+    await dbRun(`DELETE FROM certificates WHERE application_id = ?`, [appRecord.application_id]);
+    
+    // Delete application
+    await dbRun(`DELETE FROM applications WHERE id = ?`, [id]);
+
+    return res.json({ success: true, message: 'Application deleted successfully.' });
+  } catch (error) {
+    console.error('Delete application error:', error);
+    return res.status(500).json({ error: 'Failed to delete application.' });
   }
 });
 
@@ -944,7 +989,7 @@ app.get('/api/admin/files/download/:filename', authenticate, requireAdmin, (req,
 const distPath = path.join(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  app.get(/.*/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

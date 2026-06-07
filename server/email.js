@@ -161,8 +161,48 @@ const wrapHtmlEmail = (title, bodyContent) => `
  */
 export const sendAdminNotification = async (app) => {
   const adminEmail = 'manchestertechnologiess@gmail.com';
-  const subject = `New Internship Application | ${app.full_name} | ${app.preferred_duration}`;
+  const subject = `New Internship Application - ${app.full_name}`;
   
+  const textBody = `
+New Internship Application Received
+
+Application ID: ${app.application_id}
+Submission Date: ${app.created_at.split('T')[0]}
+
+Personal Information:
+- Name: ${app.full_name}
+- Email: ${app.email}
+- Mobile: ${app.phone}
+- Date of Birth: ${app.dob || 'N/A'}
+- Gender: ${app.gender || 'N/A'}
+- Address: ${app.address || 'N/A'}
+- City: ${app.city || 'N/A'}
+- State: ${app.state || 'N/A'}
+- Country: ${app.country || 'N/A'}
+
+Educational Details:
+- College: ${app.college_name}
+- Degree: ${app.degree || 'N/A'}
+- Branch: ${app.branch || 'N/A'}
+- Semester/Year: ${app.semester}
+- CGPA/Percentage: ${app.cgpa}
+
+Professional Details:
+- Skills: ${app.skills || 'N/A'}
+- Certifications: ${app.certifications || 'N/A'}
+- Previous Experience: ${app.previous_experience || 'N/A'}
+- Experience Description: ${app.experience_description || 'N/A'}
+
+Internship Details:
+- Role Applied For: ${app.preferred_domain}
+- Available Start Date: ${app.start_date}
+- Duration: ${app.preferred_duration}
+- Why do you want to join Manchester Technologies?: ${app.q_why_internship}
+- Key Skills: ${app.q_tech_best}
+- Project Description: ${app.q_best_project}
+- Additional Comments: ${app.additional_comments || 'N/A'}
+  `;
+
   const bodyHtml = wrapHtmlEmail(
     'New Application Received',
     `
@@ -177,27 +217,28 @@ export const sendAdminNotification = async (app) => {
     <table>
       <tr><td class="label">Full Name</td><td class="value">${app.full_name}</td></tr>
       <tr><td class="label">Email</td><td class="value">${app.email}</td></tr>
-      <tr><td class="label">Phone</td><td class="value">${app.phone}</td></tr>
-      <tr><td class="label">Date of Birth</td><td class="value">${app.dob}</td></tr>
-      <tr><td class="label">Gender</td><td class="value">${app.gender}</td></tr>
-      <tr><td class="label">Location</td><td class="value">${app.city}, ${app.state}</td></tr>
-      <tr><td class="label">Address</td><td class="value">${app.address}</td></tr>
+      <tr><td class="label">Phone / Mobile</td><td class="value">${app.phone}</td></tr>
+      <tr><td class="label">Date of Birth</td><td class="value">${app.dob || 'N/A'}</td></tr>
+      <tr><td class="label">Gender</td><td class="value">${app.gender || 'N/A'}</td></tr>
+      <tr><td class="label">Location</td><td class="value">${app.city}, ${app.state}, ${app.country || 'N/A'}</td></tr>
+      <tr><td class="label">Address</td><td class="value">${app.address || 'N/A'}</td></tr>
     </table>
 
     <div class="section-title">Academic Details</div>
     <table>
       <tr><td class="label">College</td><td class="value">${app.college_name}</td></tr>
-      <tr><td class="label">University</td><td class="value">${app.university_name}</td></tr>
-      <tr><td class="label">Branch</td><td class="value">${app.department}</td></tr>
-      <tr><td class="label">Semester / Year</td><td class="value">Semester ${app.semester} (Grad Year: ${app.graduation_year})</td></tr>
+      <tr><td class="label">Degree</td><td class="value">${app.degree || 'N/A'}</td></tr>
+      <tr><td class="label">Branch</td><td class="value">${app.branch || 'N/A'}</td></tr>
+      <tr><td class="label">Semester / Year</td><td class="value">Semester ${app.semester} (Grad Year: ${app.graduation_year || 'N/A'})</td></tr>
       <tr><td class="label">CGPA / %</td><td class="value">${app.cgpa}</td></tr>
     </table>
 
     <div class="section-title">Professional Details</div>
     <table>
-      <tr><td class="label">Skills</td><td class="value">${app.skills}</td></tr>
-      <tr><td class="label">Technologies</td><td class="value">${app.technologies_known}</td></tr>
-      <tr><td class="label">Languages</td><td class="value">${app.programming_languages}</td></tr>
+      <tr><td class="label">Skills</td><td class="value">${app.skills || 'N/A'}</td></tr>
+      <tr><td class="label">Certifications</td><td class="value">${app.certifications || 'N/A'}</td></tr>
+      <tr><td class="label">Previous Experience</td><td class="value">${app.previous_experience || 'N/A'}</td></tr>
+      <tr><td class="label">Experience Description</td><td class="value">${app.experience_description || 'N/A'}</td></tr>
       <tr><td class="label">GitHub</td><td class="value"><a href="${app.github_profile}" style="color:#C8A96A;" target="_blank">${app.github_profile || 'N/A'}</a></td></tr>
       <tr><td class="label">LinkedIn</td><td class="value"><a href="${app.linkedin_profile}" style="color:#C8A96A;" target="_blank">${app.linkedin_profile || 'N/A'}</a></td></tr>
       <tr><td class="label">Portfolio</td><td class="value"><a href="${app.portfolio_url}" style="color:#C8A96A;" target="_blank">${app.portfolio_url || 'N/A'}</a></td></tr>
@@ -205,21 +246,16 @@ export const sendAdminNotification = async (app) => {
 
     <div class="section-title">Internship Preferences</div>
     <table>
-      <tr><td class="label">Domain</td><td class="value" style="font-weight:bold; color:#C8A96A;">${app.preferred_domain}</td></tr>
+      <tr><td class="label">Domain (Role)</td><td class="value" style="font-weight:bold; color:#C8A96A;">${app.preferred_domain}</td></tr>
       <tr><td class="label">Duration</td><td class="value">${app.preferred_duration}</td></tr>
       <tr><td class="label">Start Date</td><td class="value">${app.start_date}</td></tr>
     </table>
 
     <div class="section-title">Questionnaire Answers</div>
-    <p><strong>1. Why do you want this internship?</strong><br/><span style="color:#ffffff;">${app.q_why_internship}</span></p>
-    <p><strong>2. What technologies do you know best?</strong><br/><span style="color:#ffffff;">${app.q_tech_best}</span></p>
-    <p><strong>3. Describe your best project.</strong><br/><span style="color:#ffffff;">${app.q_best_project}</span></p>
-    <p><strong>4. How many hours per day can you dedicate?</strong><br/><span style="color:#ffffff;">${app.q_hours_per_day}</span></p>
-    <p><strong>5. Why should we select you?</strong><br/><span style="color:#ffffff;">${app.q_why_select}</span></p>
-    <p><strong>6. What are your career goals?</strong><br/><span style="color:#ffffff;">${app.q_career_goals}</span></p>
-
-    <div class="section-title">Confidentiality Agreement</div>
-    <p style="color:#C8A96A; font-weight:500;">✓ Applicant has accepted all confidentiality agreement terms.</p>
+    <p><strong>1. Why do you want to join Manchester Technologies?</strong><br/><span style="color:#ffffff;">${app.q_why_internship}</span></p>
+    <p><strong>2. Key Skills:</strong><br/><span style="color:#ffffff;">${app.q_tech_best}</span></p>
+    <p><strong>3. Describe a project you have worked on.</strong><br/><span style="color:#ffffff;">${app.q_best_project}</span></p>
+    <p><strong>4. Additional Comments:</strong><br/><span style="color:#ffffff;">${app.additional_comments || 'N/A'}</span></p>
     `
   );
 
@@ -246,7 +282,8 @@ export const sendAdminNotification = async (app) => {
 
   const transporter = createTransporter();
   if (!transporter) {
-    console.log(`[SIMULATION] Sending Admin Email to ${adminEmail} for application ${app.application_id}. Attachments:`, attachments.map(a => a.filename));
+    console.log(`[SIMULATION] Sending Admin Email to ${adminEmail} for application ${app.application_id}. Subject: ${subject}`);
+    console.log(`[SIMULATION] Body Text:\n${textBody}`);
     return true; // Simulate success
   }
 
@@ -254,6 +291,7 @@ export const sendAdminNotification = async (app) => {
     from: `"Manchester Tech Portal" <${process.env.SMTP_USER}>`,
     to: adminEmail,
     subject: subject,
+    text: textBody,
     html: bodyHtml,
     attachments: attachments
   });

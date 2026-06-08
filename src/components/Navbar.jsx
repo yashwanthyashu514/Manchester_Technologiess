@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
 const navLinks = [
@@ -13,6 +13,26 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleLogoClick = (e) => {
+    e.preventDefault()
+    window.logoClicks = (window.logoClicks || 0) + 1
+
+    if (window.logoClickTimer) {
+      clearTimeout(window.logoClickTimer)
+    }
+
+    if (window.logoClicks === 3) {
+      window.logoClicks = 0
+      navigate('/admin/internships')
+    } else {
+      window.logoClickTimer = setTimeout(() => {
+        window.logoClicks = 0
+        navigate('/')
+      }, 500)
+    }
+  }
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50)
@@ -38,7 +58,7 @@ export default function Navbar() {
 
           {/* ✅ TOP BAR (Logo + Button) */}
           <div className="flex items-center justify-between w-full md:w-auto">
-            <Link to="/" className="flex items-center gap-2">
+            <div onClick={handleLogoClick} className="flex items-center gap-2 cursor-pointer">
               <img
                 src="/logo.jpeg"
                 alt="Manchester Technology Logo"
@@ -47,7 +67,7 @@ export default function Navbar() {
               <span className="font-heading font-bold text-xl tracking-tight">
                 Manchester<span className="text-accent">Tech</span>
               </span>
-            </Link>
+            </div>
 
             {/* Button visible on mobile also */}
             <div className="md:hidden">

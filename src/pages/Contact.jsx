@@ -83,13 +83,13 @@ export default function Contact() {
                       <p className="text-text-secondary text-sm group-hover:text-accent transition-colors">manchestertechnologiess@gmail.com</p>
                     </div>
                   </a>
-                  <a href="tel:+919036351517" className="flex items-start gap-4 group">
+                  <a href="tel:+918792480218" className="flex items-start gap-4 group">
                     <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center shrink-0 group-hover:bg-accent/20 transition-colors">
                       <Phone className="w-5 h-5 text-accent" />
                     </div>
                     <div>
                       <p className="font-heading font-semibold text-sm mb-1">Phone</p>
-                      <p className="text-text-secondary text-sm group-hover:text-accent transition-colors">+91 90363 51517</p>
+                      <p className="text-text-secondary text-sm group-hover:text-accent transition-colors">+91 87924 80218</p>
                     </div>
                   </a>
                   <div className="flex items-start gap-4">
@@ -106,7 +106,7 @@ export default function Contact() {
             </AnimatedSection>
 
             <AnimatedSection delay={0.2}>
-              <a href="https://wa.me/919036351517" target="_blank" rel="noopener noreferrer" className="glass-card p-8 flex items-center gap-6 group hover:border-accent/20 transition-all duration-300 block">
+              <a href="https://wa.me/918792480218" target="_blank" rel="noopener noreferrer" className="glass-card p-8 flex items-center gap-6 group hover:border-accent/20 transition-all duration-300 block">
                 <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0 group-hover:bg-green-500/20 transition-colors">
                   <MessageCircle className="w-8 h-8 text-green-500" />
                 </div>

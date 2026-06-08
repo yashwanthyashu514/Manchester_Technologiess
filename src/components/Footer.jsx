@@ -40,9 +40,9 @@ export default function Footer() {
                 <Mail className="w-4 h-4" />
                 manchestertechnologiess@gmail.com
               </a>
-              <a href="tel:+919036351517" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
+              <a href="tel:+918792480218" className="flex items-center gap-2 text-text-secondary hover:text-accent transition-colors text-sm">
                 <Phone className="w-4 h-4" />
-                +91 90363 51517
+                +91 87924 80218
               </a>
               <div className="flex items-center gap-2 text-text-secondary text-sm">
                 <MapPin className="w-4 h-4" />
@@ -83,7 +83,7 @@ export default function Footer() {
             <h4 className="font-heading font-semibold text-lg mb-6">Connect</h4>
             <div className="flex flex-col gap-4">
               <a
-                href="https://wa.me/919036351517"
+                href="https://wa.me/918792480218"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="glow-button-outline text-sm text-center"

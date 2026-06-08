@@ -161,7 +161,7 @@ export default function Home() {
               </button>
             </Link>
             <a
-              href="https://wa.me/919036351517"
+              href="https://wa.me/918792480218"
               target="_blank"
               rel="noopener noreferrer"
               className="glow-button-outline flex items-center gap-2"
@@ -368,7 +368,7 @@ export default function Home() {
                 </button>
               </Link>
               <a
-                href="https://wa.me/919036351517"
+                href="https://wa.me/918792480218"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="glow-button-outline flex items-center gap-2"

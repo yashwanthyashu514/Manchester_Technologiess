@@ -266,22 +266,28 @@ export const initDb = async () => {
     )
   `);
 
-  // Seed default admin if none exists
-  await dbRun(`DELETE FROM admins WHERE email = ?`, ['admin@manchestertechnologies.com']);
+  // Seed default admin accounts
+  const adminsToSeed = [
+    { username: 'admin', email: 'manchestertechnologies@gmail.com' },
+    { username: 'admin_corporate', email: 'admin@manchestertechnologies.com' }
+  ];
 
-  const adminExists = await dbGet(`SELECT id FROM admins WHERE email = ?`, ['manchestertechnologies@gmail.com']);
   const passwordHash = bcrypt.hashSync('Bery@0218', 10);
-  if (!adminExists) {
-    await dbRun(`
-      INSERT INTO admins (username, email, password_hash, created_at)
-      VALUES (?, ?, ?, ?)
-    `, ['admin', 'manchestertechnologies@gmail.com', passwordHash, new Date().toISOString()]);
-    console.log('👤 Seeded default admin account: manchestertechnologies@gmail.com / Bery@0218');
-  } else {
-    await dbRun(`
-      UPDATE admins SET password_hash = ? WHERE email = ?
-    `, [passwordHash, 'manchestertechnologies@gmail.com']);
-    console.log('👤 Updated default admin account password: manchestertechnologies@gmail.com / Bery@0218');
+
+  for (const adminData of adminsToSeed) {
+    const adminExists = await dbGet(`SELECT id FROM admins WHERE email = ?`, [adminData.email]);
+    if (!adminExists) {
+      await dbRun(`
+        INSERT INTO admins (username, email, password_hash, created_at)
+        VALUES (?, ?, ?, ?)
+      `, [adminData.username, adminData.email, passwordHash, new Date().toISOString()]);
+      console.log(`👤 Seeded default admin account: ${adminData.email} / Bery@0218`);
+    } else {
+      await dbRun(`
+        UPDATE admins SET password_hash = ? WHERE email = ?
+      `, [passwordHash, adminData.email]);
+      console.log(`👤 Updated default admin account password: ${adminData.email} / Bery@0218`);
+    }
   }
 };
 

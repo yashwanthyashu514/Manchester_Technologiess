@@ -12,16 +12,20 @@ const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const CERTS_DIR = path.join(__dirname, 'certificates');
 
-// Ensure SQLite directories exist locally
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-if (!fs.existsSync(CERTS_DIR)) {
-  fs.mkdirSync(CERTS_DIR, { recursive: true });
-}
+// Ensure SQLite directories exist locally (safe try-catch for read-only serverless filesystems)
+const ensureDirExists = (dirPath) => {
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  } catch (err) {
+    console.warn(`⚠️ Warning: Could not create directory ${dirPath}. If running on serverless environments like Vercel, this is normal and expected.`, err.message);
+  }
+};
+
+ensureDirExists(DATA_DIR);
+ensureDirExists(UPLOADS_DIR);
+ensureDirExists(CERTS_DIR);
 
 // Check database mode
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -30,26 +34,34 @@ const isPostgres = !!DATABASE_URL;
 let db = null;
 let pgPool = null;
 
-if (isPostgres) {
-  console.log('🔌 Database Mode: PostgreSQL cloud pool initialized.');
-  pgPool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false // Necessary for Neon / Supabase serverless connections
-    }
-  });
-} else {
-  console.log('📁 Database Mode: Local SQLite database initialized.');
-  let sqlite3;
-  try {
-    sqlite3 = (await import('sqlite3')).default;
-  } catch (err) {
-    console.error('Failed to dynamically load sqlite3 database driver:', err);
-    throw err;
+export const getPgPool = () => {
+  if (!pgPool && isPostgres) {
+    console.log('🔌 Database Mode: PostgreSQL cloud pool initialized.');
+    pgPool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false // Necessary for Neon / Supabase serverless connections
+      }
+    });
   }
-  const dbPath = path.join(DATA_DIR, 'portal.db');
-  db = new sqlite3.Database(dbPath);
-}
+  return pgPool;
+};
+
+export const getSqliteDb = async () => {
+  if (!db && !isPostgres) {
+    console.log('📁 Database Mode: Local SQLite database initialized.');
+    let sqlite3;
+    try {
+      sqlite3 = (await import('sqlite3')).default;
+    } catch (err) {
+      console.error('Failed to dynamically load sqlite3 database driver:', err);
+      throw err;
+    }
+    const dbPath = path.join(DATA_DIR, 'portal.db');
+    db = new sqlite3.Database(dbPath);
+  }
+  return db;
+};
 
 // Helper: Translate '?' placeholders to '$1, $2, ...' for PostgreSQL queries
 const convertSqlPlaceholders = (sql) => {
@@ -62,15 +74,17 @@ export const dbQuery = async (sql, params = []) => {
   if (isPostgres) {
     const pgSql = convertSqlPlaceholders(sql);
     try {
-      const res = await pgPool.query(pgSql, params);
+      const pool = getPgPool();
+      const res = await pool.query(pgSql, params);
       return res.rows;
     } catch (err) {
       console.error(`PostgreSQL Query Error: [${pgSql}]`, err);
       throw err;
     }
   } else {
+    const sqliteDb = await getSqliteDb();
     return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
+      sqliteDb.all(sql, params, (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
       });
@@ -82,15 +96,17 @@ export const dbGet = async (sql, params = []) => {
   if (isPostgres) {
     const pgSql = convertSqlPlaceholders(sql);
     try {
-      const res = await pgPool.query(pgSql, params);
+      const pool = getPgPool();
+      const res = await pool.query(pgSql, params);
       return res.rows[0] || null;
     } catch (err) {
       console.error(`PostgreSQL Get Error: [${pgSql}]`, err);
       throw err;
     }
   } else {
+    const sqliteDb = await getSqliteDb();
     return new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
+      sqliteDb.get(sql, params, (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
@@ -102,15 +118,17 @@ export const dbRun = async (sql, params = []) => {
   if (isPostgres) {
     const pgSql = convertSqlPlaceholders(sql);
     try {
-      const res = await pgPool.query(pgSql, params);
+      const pool = getPgPool();
+      const res = await pool.query(pgSql, params);
       return { id: null, changes: res.rowCount };
     } catch (err) {
       console.error(`PostgreSQL Run Error: [${pgSql}]`, err);
       throw err;
     }
   } else {
+    const sqliteDb = await getSqliteDb();
     return new Promise((resolve, reject) => {
-      db.run(sql, params, function(err) {
+      sqliteDb.run(sql, params, function(err) {
         if (err) reject(err);
         else resolve({ id: this.lastID, changes: this.changes });
       });

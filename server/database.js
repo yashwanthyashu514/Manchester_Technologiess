@@ -8,9 +8,11 @@ const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.join(__dirname, 'data');
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const CERTS_DIR = path.join(__dirname, 'certificates');
+const isVercel = !!process.env.VERCEL;
+
+const DATA_DIR = isVercel ? '/tmp/data' : path.join(__dirname, 'data');
+const UPLOADS_DIR = isVercel ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+const CERTS_DIR = isVercel ? '/tmp/certificates' : path.join(__dirname, 'certificates');
 
 // Ensure SQLite directories exist locally (safe try-catch for read-only serverless filesystems)
 const ensureDirExists = (dirPath) => {
@@ -58,6 +60,20 @@ export const getSqliteDb = async () => {
       throw err;
     }
     const dbPath = path.join(DATA_DIR, 'portal.db');
+
+    // On Vercel, copy pre-existing database from the bundle to the writable /tmp/data directory
+    if (isVercel) {
+      const bundleDbPath = path.join(__dirname, 'data', 'portal.db');
+      if (fs.existsSync(bundleDbPath) && !fs.existsSync(dbPath)) {
+        try {
+          fs.copyFileSync(bundleDbPath, dbPath);
+          console.log(`📋 Copied bundle portal.db to writable path: ${dbPath}`);
+        } catch (copyErr) {
+          console.error('Failed to copy bundled database to /tmp:', copyErr);
+        }
+      }
+    }
+
     db = new sqlite3.Database(dbPath);
   }
   return db;

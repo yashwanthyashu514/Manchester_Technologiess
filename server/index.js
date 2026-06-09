@@ -45,8 +45,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Ensure upload folder exists
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const CERTS_DIR = path.join(__dirname, 'certificates');
+const isVercel = !!process.env.VERCEL;
+const UPLOADS_DIR = isVercel ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+const CERTS_DIR = isVercel ? '/tmp/certificates' : path.join(__dirname, 'certificates');
 
 // Multer storage engine configuration
 const storage = multer.diskStorage({

@@ -22,6 +22,5 @@ Thumbs.db
 npm-debug.log*
 
 # Server Local Storage
-server/data/
 server/uploads/
 server/certificates/

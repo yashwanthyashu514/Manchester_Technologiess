@@ -127,7 +127,15 @@ export default function AdminInternships() {
         body: JSON.stringify({ email, password })
       })
 
-      const data = await res.json()
+      let data = {}
+      const contentType = res.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json()
+      } else {
+        // Fallback for HTML error pages or non-JSON responses from servers like Vercel
+        throw new Error('Server returned an invalid response. Please ensure database connections are configured correctly.')
+      }
+
       if (!res.ok) {
         throw new Error(data.error || 'Login verification failed.')
       }

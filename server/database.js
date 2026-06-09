@@ -1,4 +1,3 @@
-import sqlite3 from 'sqlite3';
 import pg from 'pg';
 import path from 'path';
 import fs from 'fs';
@@ -41,6 +40,13 @@ if (isPostgres) {
   });
 } else {
   console.log('📁 Database Mode: Local SQLite database initialized.');
+  let sqlite3;
+  try {
+    sqlite3 = (await import('sqlite3')).default;
+  } catch (err) {
+    console.error('Failed to dynamically load sqlite3 database driver:', err);
+    throw err;
+  }
   const dbPath = path.join(DATA_DIR, 'portal.db');
   db = new sqlite3.Database(dbPath);
 }
@@ -266,13 +272,19 @@ export const initDb = async () => {
     )
   `);
 
-  // Seed default admin accounts
+  // Seed default admin accounts (strictly only one)
   const adminsToSeed = [
-    { username: 'admin', email: 'manchestertechnologies@gmail.com' },
-    { username: 'admin_corporate', email: 'admin@manchestertechnologies.com' }
+    { username: 'admin', email: 'manchestertechnologies@gmail.com' }
   ];
 
   const passwordHash = bcrypt.hashSync('Bery@0218', 10);
+
+  // Explicitly remove the corporate placeholder account to ensure only one admin exists
+  try {
+    await dbRun(`DELETE FROM admins WHERE email = ?`, ['admin@manchestertechnologies.com']);
+  } catch (err) {
+    // Ignore error if database is not fully set up yet
+  }
 
   for (const adminData of adminsToSeed) {
     const adminExists = await dbGet(`SELECT id FROM admins WHERE email = ?`, [adminData.email]);

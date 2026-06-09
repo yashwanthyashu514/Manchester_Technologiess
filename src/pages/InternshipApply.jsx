@@ -249,7 +249,15 @@ export default function InternshipApply() {
         body: payload
       })
 
-      const result = await res.json()
+      let result = {}
+      const contentType = res.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        result = await res.json()
+      } else {
+        // Fallback for HTML error pages or non-JSON responses from servers like Vercel
+        throw new Error('Server returned an invalid response. Please ensure database connections are configured correctly.')
+      }
+
       if (!res.ok) {
         throw new Error(result.error || 'Server error occurred during submission.')
       }

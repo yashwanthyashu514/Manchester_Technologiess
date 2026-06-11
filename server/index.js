@@ -232,13 +232,13 @@ app.post('/api/internships/apply', upload.fields([
       return res.status(400).json({ error: 'Resume file is required.' });
     }
 
-    // Generate unique Application ID (MTI-YYYY-NNNN)
+    // Generate unique Application ID (MTYYYYNNNN)
     const year = new Date().getFullYear();
-    const row = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE created_at LIKE ?`, [`${year}-%`]);
+    const row = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE application_id LIKE ?`, [`MT${year}%`]);
     let count = (row ? row.count : 0) + 1;
     let application_id;
     while (true) {
-      application_id = `MTI-${year}-${String(count).padStart(4, '0')}`;
+      application_id = `MT${year}${String(count).padStart(4, '0')}`;
       const exists = await dbGet(`SELECT id FROM applications WHERE application_id = ?`, [application_id]);
       if (!exists) break;
       count++;
@@ -277,7 +277,7 @@ app.post('/api/internships/apply', upload.fields([
         preferred_domain, preferred_duration, start_date, resume_path, portfolio_path, docs_path,
         q_why_internship, q_tech_best, q_best_project, q_hours_per_day, q_why_select, q_career_goals,
         conf_agreement_1, conf_agreement_2, conf_agreement_3, conf_agreement_4,
-        created_at, ip_address, status,
+        created_at, updated_at, ip_address, status,
         country, degree, branch, certifications, previous_experience, experience_description, additional_comments
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -286,7 +286,7 @@ app.post('/api/internships/apply', upload.fields([
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         1, 1, 1, 1,
-        ?, ?, 'Pending',
+        ?, ?, ?, 'Submitted',
         ?, ?, ?, ?, ?, ?, ?
       )
     `;
@@ -297,7 +297,7 @@ app.post('/api/internships/apply', upload.fields([
       data.skills, data.technologies_known, data.programming_languages, data.github_profile, data.linkedin_profile, data.portfolio_url,
       data.preferred_domain, data.preferred_duration, data.start_date, resumePath, portfolioPath, docsPath,
       data.q_why_internship, data.q_tech_best, data.q_best_project, data.q_hours_per_day, data.q_why_select, data.q_career_goals,
-      created_at, ipAddress,
+      created_at, created_at, ipAddress,
       data.country, data.degree, data.branch, data.certifications, data.previous_experience, data.experience_description, data.additional_comments
     ];
 
@@ -345,13 +345,13 @@ app.post('/api/internships/status', async (req, res) => {
 
   try {
     const app = await dbGet(
-      `SELECT application_id, full_name, email, preferred_domain, preferred_duration, status, created_at 
-       FROM applications WHERE email = ? AND application_id = ?`, 
+      `SELECT application_id, full_name, email, preferred_domain, preferred_duration, status, created_at, updated_at 
+       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`, 
       [email.trim(), application_id.trim()]
     );
 
     if (!app) {
-      return res.status(404).json({ error: 'No application found matching the provided details.' });
+      return res.status(404).json({ error: 'No application found with the provided Email Address and Application ID.' });
     }
 
     // Fetch details based on status
@@ -566,7 +566,7 @@ app.post('/api/intern/tasks/update', authenticate, requireInternOrAdmin, async (
 app.get('/api/admin/metrics', authenticate, requireAdmin, async (req, res) => {
   try {
     const total = await dbGet(`SELECT COUNT(*) as count FROM applications`);
-    const pending = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Pending'`);
+    const pending = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Submitted' OR status = 'Pending'`);
     const shortlisted = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Shortlisted'`);
     const selected = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Selected'`);
     const active = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Active Intern'`);
@@ -724,7 +724,8 @@ app.post('/api/admin/applications/:id/status', authenticate, requireAdmin, async
   const { id } = req.params;
   const { status } = req.body;
   try {
-    await dbRun(`UPDATE applications SET status = ? WHERE id = ?`, [status, id]);
+    const updated_at = new Date().toISOString();
+    await dbRun(`UPDATE applications SET status = ?, updated_at = ? WHERE id = ?`, [status, updated_at, id]);
     return res.json({ success: true, message: `Status updated to ${status}.` });
   } catch (error) {
     console.error('Update status error:', error);
@@ -792,7 +793,7 @@ app.post('/api/admin/applications/:id/interview', authenticate, requireAdmin, as
     }
 
     // Update Application status
-    await dbRun(`UPDATE applications SET status = 'Interview Scheduled' WHERE id = ?`, [id]);
+    await dbRun(`UPDATE applications SET status = 'Interview Scheduled', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
 
     // Send notification
     const updatedApp = await dbGet(`SELECT * FROM applications WHERE id = ?`, [id]);
@@ -850,7 +851,7 @@ app.post('/api/admin/applications/:id/assign-project', authenticate, requireAdmi
     }
 
     // Update status to 'Active Intern'
-    await dbRun(`UPDATE applications SET status = 'Active Intern' WHERE id = ?`, [id]);
+    await dbRun(`UPDATE applications SET status = 'Active Intern', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
 
     return res.json({ success: true, message: 'Project assigned and intern activated.' });
 
@@ -942,7 +943,7 @@ app.post('/api/admin/applications/:id/complete', authenticate, requireAdmin, asy
     await generateCertificatePDF(certData, certPath);
 
     // Update status to 'Completed'
-    await dbRun(`UPDATE applications SET status = 'Completed' WHERE id = ?`, [id]);
+    await dbRun(`UPDATE applications SET status = 'Completed', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
 
     return res.json({
       success: true,

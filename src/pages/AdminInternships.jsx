@@ -548,6 +548,7 @@ export default function AdminInternships() {
 
   const getStatusBadgeColor = (status) => {
     switch (status) {
+      case 'Submitted': return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/5'
       case 'Pending': return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/5'
       case 'Under Review': return 'text-orange-400 border-orange-400/20 bg-orange-400/5'
       case 'Shortlisted': return 'text-purple-400 border-purple-400/20 bg-purple-400/5'

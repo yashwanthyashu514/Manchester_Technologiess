@@ -1,22 +1,219 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { 
-  Search, 
-  Calendar, 
-  MapPin, 
-  Link as LinkIcon, 
-  FileBadge, 
-  Download, 
-  ArrowRight, 
-  Loader2, 
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Search,
+  Calendar,
+  MapPin,
+  Link as LinkIcon,
+  FileBadge,
+  Download,
+  ArrowRight,
+  Loader2,
   AlertCircle,
   Clock,
-  Github,
-  BookOpen,
-  UserCheck
+  CheckCircle2,
+  XCircle,
+  UserCheck,
+  FileText,
+  Star,
+  Briefcase,
+  RefreshCw,
+  Mail,
+  Hash,
+  User,
+  Award
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AnimatedSection from '../components/AnimatedSection'
+
+// All possible status stages in order
+const STATUS_STAGES = [
+  {
+    key: 'Submitted',
+    label: 'Submitted',
+    description: 'Application received and registered in the system.',
+    icon: FileText
+  },
+  {
+    key: 'Under Review',
+    label: 'Under Review',
+    description: 'Our engineering team is reviewing your profile and credentials.',
+    icon: Search
+  },
+  {
+    key: 'Shortlisted',
+    label: 'Shortlisted',
+    description: 'You have been shortlisted for the next selection stage.',
+    icon: Star
+  },
+  {
+    key: 'Interview Scheduled',
+    label: 'Interview',
+    description: 'An interview has been scheduled. Check details below.',
+    icon: Calendar
+  },
+  {
+    key: 'Selected',
+    label: 'Selected',
+    description: 'Congratulations! You have been selected as an intern.',
+    icon: UserCheck
+  },
+  {
+    key: 'Active Intern',
+    label: 'Active Intern',
+    description: 'Project has been assigned. Access your intern workspace.',
+    icon: Briefcase
+  },
+  {
+    key: 'Completed',
+    label: 'Completed',
+    description: 'Internship completed. Certificate available for download.',
+    icon: Award
+  }
+]
+
+// Special terminal status (not part of the progress line)
+const REJECTED_STATUS = {
+  key: 'Rejected',
+  label: 'Rejected',
+  description: 'Unfortunately, your application was not selected at this time.',
+  icon: XCircle
+}
+
+function StatusTimeline({ currentStatus }) {
+  if (currentStatus === 'Rejected') {
+    return (
+      <div className="glass-card p-6 md:p-8 border border-red-500/20 bg-red-950/5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl" />
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+            <XCircle className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-red-400 text-base">Application Not Selected</h3>
+            <p className="text-xs text-text-secondary">We appreciate your interest in Manchester Technologies.</p>
+          </div>
+        </div>
+        <p className="text-xs text-text-secondary leading-relaxed pl-13 ml-1 border-l-2 border-red-500/20 pl-4">
+          Unfortunately your application was not shortlisted in the current intake. We encourage you to strengthen your profile and reapply in a future batch. Thank you for your time.
+        </p>
+      </div>
+    )
+  }
+
+  const currentIndex = STATUS_STAGES.findIndex(s => s.key === currentStatus)
+
+  return (
+    <div className="glass-card p-6 md:p-8 border border-white/5 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-3xl" />
+      <h3 className="font-heading font-bold text-white text-sm mb-6 uppercase tracking-wider">Application Progress</h3>
+
+      {/* Desktop: horizontal stepper */}
+      <div className="hidden md:flex items-start relative">
+        {/* Progress line */}
+        <div className="absolute top-5 left-0 right-0 h-0.5 bg-white/5" />
+        <div
+          className="absolute top-5 left-0 h-0.5 bg-accent transition-all duration-700"
+          style={{
+            width: currentIndex >= 0
+              ? `${(currentIndex / (STATUS_STAGES.length - 1)) * 100}%`
+              : '0%'
+          }}
+        />
+
+        {STATUS_STAGES.map((stage, idx) => {
+          const isCompleted = idx < currentIndex
+          const isCurrent = idx === currentIndex
+          const isPending = idx > currentIndex
+
+          return (
+            <div key={stage.key} className="flex-1 flex flex-col items-center relative z-10">
+              {/* Circle */}
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: isCurrent ? 1.1 : 1 }}
+                className={`w-10 h-10 rounded-full border-2 flex items-center justify-center mb-3 transition-all duration-300 ${
+                  isCompleted
+                    ? 'border-accent bg-accent text-background'
+                    : isCurrent
+                    ? 'border-accent bg-accent/20 text-accent shadow-[0_0_16px_rgba(200,169,106,0.4)]'
+                    : 'border-white/10 bg-background text-text-muted'
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <stage.icon className="w-4 h-4" />
+                )}
+              </motion.div>
+
+              {/* Label */}
+              <span className={`text-[9px] font-bold uppercase tracking-wider text-center ${
+                isCompleted || isCurrent ? 'text-white' : 'text-text-muted'
+              }`}>
+                {stage.label}
+              </span>
+
+              {/* Current stage description tooltip */}
+              {isCurrent && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute top-14 left-1/2 -translate-x-1/2 w-36 bg-accent/10 border border-accent/20 rounded-lg p-2 text-center z-20"
+                >
+                  <span className="text-[9px] text-accent leading-tight block">◀ Current Stage ▶</span>
+                </motion.div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Mobile: vertical stepper */}
+      <div className="flex md:hidden flex-col gap-0">
+        {STATUS_STAGES.map((stage, idx) => {
+          const isCompleted = idx < currentIndex
+          const isCurrent = idx === currentIndex
+          const isLast = idx === STATUS_STAGES.length - 1
+
+          return (
+            <div key={stage.key} className="flex items-start gap-4">
+              {/* Left: Icon + Connector */}
+              <div className="flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                  isCompleted
+                    ? 'border-accent bg-accent text-background'
+                    : isCurrent
+                    ? 'border-accent bg-accent/20 text-accent shadow-[0_0_12px_rgba(200,169,106,0.4)]'
+                    : 'border-white/10 bg-background text-text-muted'
+                }`}>
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <stage.icon className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                {!isLast && (
+                  <div className={`w-0.5 h-8 mt-1 ${isCompleted ? 'bg-accent' : 'bg-white/5'}`} />
+                )}
+              </div>
+
+              {/* Right: Text */}
+              <div className="pb-6">
+                <span className={`text-xs font-bold ${isCompleted || isCurrent ? 'text-white' : 'text-text-muted'}`}>
+                  {stage.label}
+                </span>
+                {isCurrent && (
+                  <p className="text-[10px] text-accent mt-0.5">{stage.description}</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export default function InternshipStatus() {
   const [email, setEmail] = useState('')
@@ -30,7 +227,7 @@ export default function InternshipStatus() {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!email || !appId) return
+    if (!email.trim() || !appId.trim()) return
 
     setIsLoading(true)
     setError(null)
@@ -39,9 +236,7 @@ export default function InternshipStatus() {
     try {
       const res = await fetch('/api/internships/status', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           application_id: appId.trim()
@@ -50,7 +245,7 @@ export default function InternshipStatus() {
 
       const result = await res.json()
       if (!res.ok) {
-        throw new Error(result.error || 'Failed to fetch application status.')
+        throw new Error(result.error || 'No application found with the provided Email Address and Application ID.')
       }
 
       setData(result)
@@ -62,15 +257,20 @@ export default function InternshipStatus() {
     }
   }
 
-  // Handle selection redirect to Intern Dashboard (logs in by generating JWT)
+  const handleReset = () => {
+    setData(null)
+    setError(null)
+    setEmail('')
+    setAppId('')
+  }
+
+  // Intern dashboard login (only for Selected / Active Intern)
   const handleInternLogin = async () => {
     setIsLoggingIn(true)
     try {
       const res = await fetch('/api/auth/intern-login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           application_id: appId.trim()
@@ -82,11 +282,8 @@ export default function InternshipStatus() {
         throw new Error(result.error || 'Failed to log in to dashboard.')
       }
 
-      // Save token & user
       localStorage.setItem('token', result.token)
       localStorage.setItem('user', JSON.stringify(result.user))
-
-      // Navigate to Intern Dashboard
       navigate('/internships/dashboard')
     } catch (err) {
       alert(err.message || 'Failed to initialize intern session.')
@@ -95,156 +292,215 @@ export default function InternshipStatus() {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Pending': return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
-      case 'Under Review': return 'text-orange-400 bg-orange-400/10 border-orange-400/20'
-      case 'Shortlisted': return 'text-purple-400 bg-purple-400/10 border-purple-400/20'
-      case 'Interview Scheduled': return 'text-blue-400 bg-blue-400/10 border-blue-400/20'
-      case 'Selected': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
-      case 'Rejected': return 'text-red-400 bg-red-400/10 border-red-400/20'
-      case 'Active Intern': return 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20'
-      case 'Completed': return 'text-green-400 bg-green-400/10 border-green-400/20'
-      default: return 'text-text-muted bg-white/5 border-white/10'
+  const getStatusBadge = (status) => {
+    const map = {
+      'Submitted':           'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+      'Pending':             'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+      'Under Review':        'text-orange-400 bg-orange-400/10 border-orange-400/20',
+      'Shortlisted':         'text-purple-400 bg-purple-400/10 border-purple-400/20',
+      'Interview Scheduled': 'text-blue-400 bg-blue-400/10 border-blue-400/20',
+      'Selected':            'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+      'Rejected':            'text-red-400 bg-red-400/10 border-red-400/20',
+      'Active Intern':       'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
+      'Completed':           'text-green-400 bg-green-400/10 border-green-400/20',
     }
+    return map[status] || 'text-text-muted bg-white/5 border-white/10'
   }
 
   return (
     <main className="pt-20">
       <section className="section-padding py-16 max-w-4xl mx-auto">
-        
-        {/* Title */}
+
+        {/* Header */}
         <AnimatedSection className="text-center mb-10">
           <span className="text-accent text-xs font-semibold tracking-wider uppercase bg-accent/10 px-3 py-1.5 rounded-md">
             Candidate Portal
           </span>
           <h1 className="heading-lg mt-4 mb-2">Track Application Status</h1>
-          <p className="body-md text-text-secondary">
-            Enter your details to track interview details, projects, and download completion certificates.
+          <p className="body-md text-text-secondary max-w-xl mx-auto">
+            Enter your registered email and Application ID to track your internship application status.
           </p>
         </AnimatedSection>
 
-        {/* Input Form */}
-        <AnimatedSection>
-          <div className="glass-card p-6 md:p-8 border border-white/5 mb-8">
-            <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              <div className="md:col-span-5">
-                <label className="block text-xs font-bold text-text-secondary uppercase mb-2">Registered Email Address</label>
-                <input 
-                  type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="john.doe@example.com"
-                  className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div className="md:col-span-5">
-                <label className="block text-xs font-bold text-text-secondary uppercase mb-2">Application ID</label>
-                <input 
-                  type="text" required value={appId} onChange={(e) => setAppId(e.target.value)}
-                  placeholder="MTI-2026-0001"
-                  className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <button 
-                  type="submit" disabled={isLoading}
-                  className="w-full glow-button py-3 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                  Search
-                </button>
-              </div>
-            </form>
-          </div>
-        </AnimatedSection>
-
-        {/* Error Alert */}
-        {error && (
-          <AnimatedSection>
-            <div className="bg-red-950/20 border border-red-500/30 p-5 rounded-xl text-red-400 text-sm flex gap-3 mb-8">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <strong className="block mb-1">Search Failed</strong>
-                <p>{error}</p>
-              </div>
-            </div>
-          </AnimatedSection>
-        )}
-
-        {/* Data Output Display */}
-        {data && (
-          <AnimatedSection>
-            <div className="space-y-6">
-              
-              {/* Application Details */}
-              <div className="glass-card p-6 md:p-8 border border-white/5 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-full blur-2xl" />
-                
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6 mb-6">
-                  <div>
-                    <span className="text-xs text-text-muted uppercase block">Applicant Profile</span>
-                    <h2 className="text-xl font-heading font-bold text-white mt-1">{data.application.full_name}</h2>
-                    <span className="text-xs text-text-secondary mt-1 block">ID: {data.application.application_id}</span>
+        {/* Search Form */}
+        <AnimatePresence mode="wait">
+          {!data ? (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <div className="glass-card p-6 md:p-8 border border-white/5 mb-8">
+                <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-5">
+                    <label className="block text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5" /> Registered Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="john.doe@example.com"
+                      className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors text-sm"
+                    />
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-text-muted">Status:</span>
-                    <span className={`px-4 py-1.5 rounded-full border text-xs font-bold ${getStatusColor(data.application.status)}`}>
+                  <div className="md:col-span-5">
+                    <label className="block text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5" /> Application ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appId}
+                      onChange={(e) => setAppId(e.target.value.toUpperCase())}
+                      placeholder="MT20260001"
+                      className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors text-sm font-mono"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      id="track-application-btn"
+                      className="w-full glow-button py-3 flex items-center justify-center gap-2"
+                    >
+                      {isLoading
+                        ? <Loader2 className="w-5 h-5 animate-spin" />
+                        : <Search className="w-5 h-5" />
+                      }
+                      <span className="hidden sm:inline">Search</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Info tip */}
+                <p className="text-[10px] text-text-muted mt-4 flex items-start gap-1.5">
+                  <AlertCircle className="w-3 h-3 shrink-0 mt-0.5 text-accent/60" />
+                  Your Application ID (e.g., MT20260001) was sent to your email upon applying. Both fields must match the same application record.
+                </p>
+              </div>
+
+              {/* Error message */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="bg-red-950/20 border border-red-500/30 p-5 rounded-xl text-red-400 text-sm flex gap-3 mb-8"
+                  >
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block mb-1">Verification Failed</strong>
+                      <p className="text-xs">{error}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {/* === APPLICATION DETAILS CARD === */}
+              <div className="glass-card p-6 md:p-8 border border-white/5 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-3xl" />
+
+                {/* Header Row: Name + Status Badge */}
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6 pb-6 border-b border-white/5">
+                  <div>
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider block">Application Profile</span>
+                    <h2 className="text-2xl font-heading font-bold text-white mt-1">{data.application.full_name}</h2>
+                    <span className="text-xs text-text-secondary font-mono mt-1 block">ID: {data.application.application_id}</span>
+                  </div>
+
+                  <div className="flex flex-col items-start md:items-end gap-2">
+                    <span className="text-[10px] text-text-muted uppercase">Current Status</span>
+                    <span className={`px-4 py-1.5 rounded-full border text-xs font-bold ${getStatusBadge(data.application.status)}`}>
                       {data.application.status}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-background/40 p-4 rounded-lg border border-white/5">
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Specialization</span>
-                    <span className="text-sm font-semibold text-white">{data.application.preferred_domain}</span>
-                  </div>
-
-                  <div className="bg-background/40 p-4 rounded-lg border border-white/5">
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Preferred Duration</span>
-                    <span className="text-sm font-semibold text-white">{data.application.preferred_duration}</span>
-                  </div>
-
-                  <div className="bg-background/40 p-4 rounded-lg border border-white/5">
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Date Submitted</span>
-                    <span className="text-sm font-semibold text-white">
-                      {new Date(data.application.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
+                {/* Details Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { icon: User,       label: 'Applicant Name',     value: data.application.full_name },
+                    { icon: Hash,       label: 'Application ID',      value: data.application.application_id, mono: true },
+                    { icon: Mail,       label: 'Email Address',       value: data.application.email },
+                    { icon: Briefcase,  label: 'Applied Position',    value: data.application.preferred_domain },
+                    { icon: Calendar,   label: 'Date of Application', value: new Date(data.application.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) },
+                    { icon: Clock,      label: 'Last Updated',        value: new Date(data.application.updated_at || data.application.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) },
+                  ].map((item, i) => (
+                    <div key={i} className="bg-background/40 p-4 rounded-xl border border-white/5 group hover:border-accent/20 transition-all">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <item.icon className="w-3.5 h-3.5 text-accent/70" />
+                        <span className="text-[10px] text-text-muted uppercase tracking-wider">{item.label}</span>
+                      </div>
+                      <span className={`text-sm font-semibold text-white block truncate ${item.mono ? 'font-mono text-accent' : ''}`}>
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Status Specific Cards */}
-              
-              {/* INTERVIEW SCHEDULE CARD */}
+              {/* === STATUS PROGRESS TIMELINE === */}
+              <StatusTimeline currentStatus={data.application.status} />
+
+              {/* === INTERVIEW DETAILS (when Interview Scheduled) === */}
               {data.application.status === 'Interview Scheduled' && data.interview && (
-                <div className="glass-card p-6 md:p-8 border border-blue-500/20 bg-blue-950/5 relative overflow-hidden">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-6 md:p-8 border border-blue-500/20 bg-blue-950/5 relative overflow-hidden"
+                >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl" />
-                  
-                  <h3 className="font-heading font-bold text-blue-400 text-lg mb-4 flex items-center gap-2">
+
+                  <h3 className="font-heading font-bold text-blue-400 text-base mb-5 flex items-center gap-2">
                     <Calendar className="w-5 h-5" /> Interview Schedule Details
                   </h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 text-text-secondary text-sm">
-                        <Clock className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>Date & Time: <strong>{data.interview.interview_date}</strong> at <strong>{data.interview.interview_time}</strong></span>
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                          <Clock className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-text-muted uppercase block">Date & Time</span>
+                          <span className="text-sm font-semibold text-white">
+                            {data.interview.interview_date} at {data.interview.interview_time}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-text-secondary text-sm">
-                        <MapPin className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>Venue: <strong>{data.interview.venue}</strong></span>
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                          <MapPin className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-text-muted uppercase block">Venue</span>
+                          <span className="text-sm font-semibold text-white">{data.interview.venue}</span>
+                        </div>
                       </div>
                     </div>
 
                     {data.interview.online_link && (
-                      <div className="flex flex-col justify-center">
-                        <a 
-                          href={data.interview.online_link} target="_blank" rel="noreferrer"
-                          className="flex items-center justify-center gap-2 bg-blue-500 text-white font-bold p-3 rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                      <div className="flex items-center">
+                        <a
+                          href={data.interview.online_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold p-3 rounded-xl transition-colors text-sm"
                         >
                           <LinkIcon className="w-4 h-4" /> Join Online Meeting
                         </a>
@@ -253,76 +509,120 @@ export default function InternshipStatus() {
                   </div>
 
                   {data.interview.instructions && (
-                    <div className="bg-background/80 border border-blue-500/10 p-4 rounded-lg text-xs text-text-secondary leading-relaxed">
-                      <strong className="block text-blue-400 mb-1">Candidate Instructions:</strong>
+                    <div className="mt-5 bg-background/60 border border-blue-500/10 p-4 rounded-xl text-xs text-text-secondary leading-relaxed">
+                      <strong className="block text-blue-400 mb-2">Candidate Instructions:</strong>
                       {data.interview.instructions}
                     </div>
                   )}
-                </div>
+                </motion.div>
               )}
 
-              {/* SELECTED OR ACTIVE INTERN CARD */}
+              {/* === SELECTED / ACTIVE INTERN CARD === */}
               {['Selected', 'Active Intern'].includes(data.application.status) && (
-                <div className="glass-card p-6 md:p-8 border border-accent/20 bg-accent/5 relative overflow-hidden">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-6 md:p-8 border border-accent/20 bg-accent/5 relative overflow-hidden"
+                >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-accent/10 rounded-full blur-2xl" />
-                  
-                  <h3 className="font-heading font-bold text-accent text-lg mb-2 flex items-center gap-2">
-                    <UserCheck className="w-5 h-5" /> Internship Access Granted!
-                  </h3>
-                  
-                  <p className="text-xs text-text-secondary mb-6 max-w-xl">
-                    Congratulations! Your application has been approved. You have been assigned to development tasks. Click below to launch your personal intern dashboard.
-                  </p>
+
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+                      <UserCheck className="w-6 h-6 text-accent" />
+                    </div>
+                    <div>
+                      <h3 className="font-heading font-bold text-accent text-lg">Internship Access Granted!</h3>
+                      <p className="text-xs text-text-secondary mt-1">
+                        Congratulations! You have been selected. Click below to access your personal intern workspace with project tasks and mentor feedback.
+                      </p>
+                    </div>
+                  </div>
 
                   <button
                     onClick={handleInternLogin}
                     disabled={isLoggingIn}
-                    className="glow-button flex items-center gap-2 px-8 py-3 text-xs"
+                    id="access-intern-dashboard-btn"
+                    className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
                   >
                     {isLoggingIn ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Starting Dashboard...
-                      </>
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Starting Dashboard...</>
                     ) : (
-                      <>
-                        Access Intern Dashboard <ArrowRight className="w-4 h-4" />
-                      </>
+                      <> Access Intern Dashboard <ArrowRight className="w-4 h-4" /></>
                     )}
                   </button>
-                </div>
+                </motion.div>
               )}
 
-              {/* COMPLETED CARD (Certificate Download) */}
+              {/* === COMPLETED + CERTIFICATE CARD === */}
               {data.application.status === 'Completed' && data.certificate && (
-                <div className="glass-card p-6 md:p-8 border border-green-500/20 bg-green-950/5 relative overflow-hidden">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-6 md:p-8 border border-green-500/20 bg-green-950/5 relative overflow-hidden"
+                >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/10 rounded-full blur-2xl" />
-                  
-                  <h3 className="font-heading font-bold text-green-400 text-lg mb-2 flex items-center gap-2">
-                    <FileBadge className="w-5 h-5" /> Internship Completed Successfully!
-                  </h3>
-                  
-                  <p className="text-xs text-text-secondary mb-6 max-w-xl">
-                    Congratulations on successfully completing your internship project. Your certificate is verified and available for download.
-                  </p>
+
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center shrink-0">
+                      <FileBadge className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-heading font-bold text-green-400 text-lg">Internship Completed!</h3>
+                      <p className="text-xs text-text-secondary mt-1">
+                        Congratulations on successfully completing your internship program. Your verified certificate is ready for download.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-background/50 border border-green-500/10 rounded-xl p-4 mb-5 text-xs text-text-secondary space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">Certificate Number:</span>
+                      <span className="font-mono font-bold text-white">{data.certificate.certificate_number}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">Domain:</span>
+                      <span className="text-white font-medium">{data.certificate.domain}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">Duration:</span>
+                      <span className="text-white">{data.certificate.duration}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">Period:</span>
+                      <span className="text-white">{data.certificate.start_date} → {data.certificate.end_date}</span>
+                    </div>
+                  </div>
 
                   <div className="flex flex-wrap gap-4 items-center">
-                    <a 
+                    <a
                       href={`/api/internships/certificate/download/${data.certificate.certificate_number}`}
-                      className="glow-button flex items-center gap-2 px-8 py-3 text-xs"
+                      id="download-certificate-btn"
+                      className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
                     >
                       <Download className="w-4 h-4" /> Download PDF Certificate
                     </a>
-                    
-                    <span className="text-xs text-text-muted">
-                      Certificate No: <strong>{data.certificate.certificate_number}</strong>
-                    </span>
+                    <a
+                      href={`/internships/verify-certificate/${data.certificate.certificate_number}`}
+                      className="glow-button-outline flex items-center gap-2 px-6 py-3 text-xs"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Verify Online
+                    </a>
                   </div>
-                </div>
+                </motion.div>
               )}
 
-            </div>
-          </AnimatedSection>
-        )}
+              {/* Back / New Search button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-2 text-xs text-text-secondary hover:text-accent transition-colors py-2 px-4 rounded-lg hover:bg-accent/5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Search Another Application
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </section>
     </main>

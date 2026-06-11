@@ -302,40 +302,62 @@ Internship Details:
  * Sends a confirmation email to the applicant.
  */
 export const sendApplicantConfirmation = async (app) => {
-  const subject = `Application Received - Manchester Technologies Internship Program`;
+  const subject = `Application Received – Manchester Technologies | ${app.application_id}`;
   
   const bodyHtml = wrapHtmlEmail(
-    'Application Received',
+    'Application Successfully Received',
     `
     <p>Dear <strong>${app.full_name}</strong>,</p>
     
-    <p>Thank you for applying for the internship program at Manchester Technologies! We have received your application and will review it shortly.</p>
+    <p>Thank you for applying to Manchester Technologies.<br/>
+    Your application has been <strong style="color:#C8A96A;">successfully received</strong> and registered in our system.</p>
     
     <div class="highlight-box">
-      <strong>Your Application ID:</strong> ${app.application_id}<br/>
-      <strong>Preferred Domain:</strong> ${app.preferred_domain}<br/>
-      <strong>Preferred Duration:</strong> ${app.preferred_duration}<br/>
-      <strong>Submitted On:</strong> ${app.created_at.split('T')[0]}
+      <table style="width:100%; border-collapse:collapse;">
+        <tr>
+          <td style="padding: 5px 0; color:#A0A0A0; width:40%;">Applicant Name</td>
+          <td style="padding: 5px 0; color:#ffffff; font-weight:bold;">${app.full_name}</td>
+        </tr>
+        <tr>
+          <td style="padding: 5px 0; color:#A0A0A0;">Application ID</td>
+          <td style="padding: 5px 0; color:#C8A96A; font-weight:bold; font-size:16px; letter-spacing:1px;">${app.application_id}</td>
+        </tr>
+        <tr>
+          <td style="padding: 5px 0; color:#A0A0A0;">Date Submitted</td>
+          <td style="padding: 5px 0; color:#ffffff;">${new Date(app.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+        </tr>
+        <tr>
+          <td style="padding: 5px 0; color:#A0A0A0;">Applied Domain</td>
+          <td style="padding: 5px 0; color:#ffffff;">${app.preferred_domain}</td>
+        </tr>
+      </table>
     </div>
-    
-    <h3>What are the next steps?</h3>
-    <ol>
-      <li>Our HR & Technical teams will review your academic and professional profiles.</li>
-      <li>If shortlisted, you will receive an invitation email to schedule your interview (online or offline).</li>
-      <li>You can track the live status of your application at any time using our status portal by clicking the button below.</li>
-    </ol>
 
-    <div style="text-align: center;">
+    <p style="color:#C8A96A; font-weight:bold; margin-top:20px;">⚠️ Please keep this Application ID safe.</p>
+    <p>It will be required to track your application status on our website.</p>
+    
+    <p>You can track your application status anytime using:
+    <ul style="color: #ffffff; padding-left: 20px; margin-top:8px;">
+      <li>Your Registered Email Address</li>
+      <li>Application ID: <strong style="color:#C8A96A;">${app.application_id}</strong></li>
+    </ul>
+    </p>
+    
+    <p>Our recruitment team will carefully review your application and contact you if you are shortlisted for the next stage.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
       <a href="${process.env.PORTAL_URL || 'http://localhost:5173'}/internships/status" class="btn">Track Application Status</a>
     </div>
 
-    <p style="margin-top: 30px;">Best Regards,<br/><strong>Manchester Technologies Recruitment Team</strong></p>
+    <p style="margin-top: 30px;">Regards,<br/>
+    <strong>Recruitment Team</strong><br/>
+    Manchester Technologies</p>
     `
   );
 
   const transporter = createTransporter();
   if (!transporter) {
-    console.log(`[SIMULATION] Sending Applicant Email to ${app.email} for application ${app.application_id}.`);
+    console.log(`[SIMULATION] Sending Applicant Confirmation Email to ${app.email} — Application ID: ${app.application_id}`);
     return true;
   }
 

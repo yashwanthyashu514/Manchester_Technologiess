@@ -210,8 +210,9 @@ export const initDb = async () => {
       conf_agreement_2 INTEGER NOT NULL CHECK(conf_agreement_2 = 1),
       conf_agreement_3 INTEGER NOT NULL CHECK(conf_agreement_3 = 1),
       conf_agreement_4 INTEGER NOT NULL CHECK(conf_agreement_4 = 1),
-      status VARCHAR(50) DEFAULT 'Pending',
+      status VARCHAR(50) DEFAULT 'Submitted',
       created_at TEXT NOT NULL,
+      updated_at TEXT,
       ip_address TEXT,
       notes TEXT,
       email_notification_sent INTEGER DEFAULT 0,
@@ -234,7 +235,8 @@ export const initDb = async () => {
     { name: 'certifications', type: 'TEXT' },
     { name: 'previous_experience', type: 'TEXT' },
     { name: 'experience_description', type: 'TEXT' },
-    { name: 'additional_comments', type: 'TEXT' }
+    { name: 'additional_comments', type: 'TEXT' },
+    { name: 'updated_at', type: 'TEXT' }
   ];
 
   for (const col of newColumns) {
@@ -244,6 +246,16 @@ export const initDb = async () => {
     } catch (err) {
       // Column already exists or error, safe to ignore
     }
+  }
+
+  // Migrate any existing 'Pending' statuses to 'Submitted'
+  try {
+    const migrated = await dbRun(`UPDATE applications SET status = 'Submitted' WHERE status = 'Pending'`);
+    if (migrated && migrated.changes > 0) {
+      console.log(`✅ Migrated ${migrated.changes} applications from Pending to Submitted.`);
+    }
+  } catch (err) {
+    console.warn('⚠️ Warning: Failed to run status migration.', err.message);
   }
 
   // Interviews Table

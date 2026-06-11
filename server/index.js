@@ -399,6 +399,33 @@ app.get('/api/internships/verify-certificate/:certificateNumber', async (req, re
   }
 });
 
+// SMTP Test Diagnostic Endpoint (Admin use only)
+app.get('/api/test-smtp', async (req, res) => {
+  const nodemailer = await import('nodemailer');
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+
+  if (!smtpUser || !smtpPass) {
+    return res.json({ success: false, error: 'SMTP credentials missing from environment variables.', SMTP_USER: smtpUser || 'NOT SET', SMTP_PASS: smtpPass ? '***SET***' : 'NOT SET' });
+  }
+
+  try {
+    const transporter = nodemailer.default.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: false,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+
+    await transporter.verify();
+    return res.json({ success: true, message: 'SMTP connection verified successfully! Emails will work.', SMTP_USER: smtpUser, SMTP_HOST: smtpHost, SMTP_PORT: smtpPort });
+  } catch (err) {
+    return res.json({ success: false, error: err.message, SMTP_USER: smtpUser, SMTP_HOST: smtpHost });
+  }
+});
+
 
 /* =========================================================================
    AUTHENTICATION ENDPOINTS
@@ -408,6 +435,7 @@ app.get('/api/internships/verify-certificate/:certificateNumber', async (req, re
 app.post('/api/auth/admin-login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
+
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 

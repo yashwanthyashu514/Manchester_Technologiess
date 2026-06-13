@@ -266,6 +266,17 @@ app.post('/api/internships/apply', upload.fields([
       fs.renameSync(docsFile.path, docsPath);
     }
 
+    // Read uploaded files into Base64 strings for database persistence in ephemeral serverless environments
+    const resumeData = fs.readFileSync(resumePath).toString('base64');
+    let portfolioData = null;
+    if (portfolioPath) {
+      portfolioData = fs.readFileSync(portfolioPath).toString('base64');
+    }
+    let docsData = null;
+    if (docsPath) {
+      docsData = fs.readFileSync(docsPath).toString('base64');
+    }
+
     const created_at = new Date().toISOString();
 
     // Insert Application into DB using prepared statements
@@ -278,7 +289,8 @@ app.post('/api/internships/apply', upload.fields([
         q_why_internship, q_tech_best, q_best_project, q_hours_per_day, q_why_select, q_career_goals,
         conf_agreement_1, conf_agreement_2, conf_agreement_3, conf_agreement_4,
         created_at, updated_at, ip_address, status,
-        country, degree, branch, certifications, previous_experience, experience_description, additional_comments
+        country, degree, branch, certifications, previous_experience, experience_description, additional_comments,
+        resume_data, portfolio_data, docs_data
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
@@ -287,7 +299,8 @@ app.post('/api/internships/apply', upload.fields([
         ?, ?, ?, ?, ?, ?,
         1, 1, 1, 1,
         ?, ?, ?, 'Submitted',
-        ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?
       )
     `;
 
@@ -298,10 +311,12 @@ app.post('/api/internships/apply', upload.fields([
       data.preferred_domain, data.preferred_duration, data.start_date, resumePath, portfolioPath, docsPath,
       data.q_why_internship, data.q_tech_best, data.q_best_project, data.q_hours_per_day, data.q_why_select, data.q_career_goals,
       created_at, created_at, ipAddress,
-      data.country, data.degree, data.branch, data.certifications, data.previous_experience, data.experience_description, data.additional_comments
+      data.country, data.degree, data.branch, data.certifications, data.previous_experience, data.experience_description, data.additional_comments,
+      resumeData, portfolioData, docsData
     ];
 
     await dbRun(sql, params);
+
 
     // Fetch the newly inserted application record
     const application = await dbGet(`SELECT * FROM applications WHERE application_id = ?`, [application_id]);
@@ -1000,20 +1015,57 @@ app.get('/api/internships/certificate/download/:certificateNumber', async (req, 
 });
 
 // Secure download for resume/docs (Admin only)
-app.get('/api/admin/files/download/:filename', authenticate, requireAdmin, (req, res) => {
+app.get('/api/admin/files/download/:filename', authenticate, requireAdmin, async (req, res) => {
   const { filename } = req.params;
   
   // Prevent path traversal
   const safeFilename = path.basename(filename);
   const filePath = path.join(UPLOADS_DIR, safeFilename);
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('File not found.');
+  if (fs.existsSync(filePath)) {
+    // Detect mime type or download as stream
+    return res.download(filePath, safeFilename);
   }
 
-  // Detect mime type or download as stream
-  return res.download(filePath, safeFilename);
+  // Fallback: load from database if file is not found on disk (e.g. serverless environment like Vercel)
+  try {
+    const match = safeFilename.match(/^(MT[A-Za-z0-9\-]+)_(resume|portfolio|docs)(\.[a-zA-Z0-9]+)$/i);
+    if (!match) {
+      return res.status(404).send('File not found and filename format is invalid.');
+    }
+
+    const [_, appId, fileType, ext] = match;
+    const colName = `${fileType}_data`; // e.g. resume_data, portfolio_data, docs_data
+    
+    // Validate colName to prevent SQL injection
+    if (!['resume_data', 'portfolio_data', 'docs_data'].includes(colName)) {
+      return res.status(400).send('Invalid file query.');
+    }
+
+    const application = await dbGet(`SELECT ${colName} FROM applications WHERE application_id = ?`, [appId]);
+    if (!application || !application[colName]) {
+      return res.status(404).send('File not found on disk or database.');
+    }
+
+    const fileBuffer = Buffer.from(application[colName], 'base64');
+    
+    // Determine content type
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (['.jpg', '.jpeg'].includes(ext)) contentType = 'image/jpeg';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.doc') contentType = 'application/msword';
+    else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
+    return res.send(fileBuffer);
+  } catch (err) {
+    console.error('File download database fallback error:', err);
+    return res.status(500).send('Error retrieving file from database.');
+  }
 });
+
 
 // Serve frontend in production (Vite Build output)
 const distPath = path.join(__dirname, '../dist');

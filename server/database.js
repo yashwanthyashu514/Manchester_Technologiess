@@ -236,8 +236,12 @@ export const initDb = async () => {
     { name: 'previous_experience', type: 'TEXT' },
     { name: 'experience_description', type: 'TEXT' },
     { name: 'additional_comments', type: 'TEXT' },
-    { name: 'updated_at', type: 'TEXT' }
+    { name: 'updated_at', type: 'TEXT' },
+    { name: 'resume_data', type: 'TEXT' },
+    { name: 'portfolio_data', type: 'TEXT' },
+    { name: 'docs_data', type: 'TEXT' }
   ];
+
 
   for (const col of newColumns) {
     try {

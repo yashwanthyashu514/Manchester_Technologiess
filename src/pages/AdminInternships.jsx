@@ -531,7 +531,12 @@ export default function AdminInternships() {
       const res = await fetch(`/api/admin/files/download/${encodeURIComponent(filename)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      if (!res.ok) throw new Error('Download request rejected.')
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('File not found on the server. Please check if the file was physically uploaded or deleted.')
+        }
+        throw new Error('Download request rejected by server. Access Denied or Session Expired.')
+      }
       
       const blob = await res.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
@@ -545,6 +550,7 @@ export default function AdminInternships() {
       alert('File download failed: ' + err.message)
     }
   }
+
 
   const getStatusBadgeColor = (status) => {
     switch (status) {
@@ -852,11 +858,11 @@ export default function AdminInternships() {
 
                     {/* Quick Action bar */}
                     <div className="flex flex-wrap gap-2 border-y border-white/5 py-4">
-                      {selectedAppDetails.application.status === 'Pending' && (
+                      {['Submitted', 'Pending'].includes(selectedAppDetails.application.status) && (
                         <button onClick={() => handleUpdateStatus('Under Review')} className="bg-orange-500 text-white font-bold px-4 py-2 rounded text-xs">Review Profile</button>
                       )}
                       
-                      {['Pending', 'Under Review'].includes(selectedAppDetails.application.status) && (
+                      {['Submitted', 'Pending', 'Under Review'].includes(selectedAppDetails.application.status) && (
                         <>
                           <button onClick={() => setActiveModal('interview')} className="bg-blue-500 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule Interview</button>
                           <button onClick={() => handleUpdateStatus('Rejected')} className="bg-red-500 text-white font-bold px-4 py-2 rounded text-xs">Reject</button>
@@ -894,6 +900,22 @@ export default function AdminInternships() {
                         <Trash2 className="w-3.5 h-3.5" /> Delete Application
                       </button>
                     </div>
+
+                    {/* Status Dropdown Manual Override */}
+                    <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-3 text-xs">
+                      <span className="text-text-secondary font-bold uppercase tracking-wider text-[10px]">Assign Status:</span>
+                      <select
+                        value={selectedAppDetails.application.status}
+                        onChange={(e) => handleUpdateStatus(e.target.value)}
+                        disabled={isUpdatingStatus}
+                        className="bg-background border border-white/20 rounded px-2.5 py-1 text-xs text-white focus:border-accent focus:outline-none"
+                      >
+                        {['Submitted', 'Pending', 'Under Review', 'Shortlisted', 'Interview Scheduled', 'Selected', 'Rejected', 'Active Intern', 'Completed'].map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    </div>
+
 
                     {/* Detailed Data Tabs */}
                     <div className="space-y-6 text-xs">

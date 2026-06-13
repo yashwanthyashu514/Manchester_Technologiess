@@ -535,8 +535,21 @@ export default function AdminInternships() {
         if (res.status === 404) {
           throw new Error('File not found on the server. Please check if the file was physically uploaded or deleted.')
         }
-        throw new Error('Download request rejected by server. Access Denied or Session Expired.')
+        let errMsg = 'Download request rejected by server.';
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errMsg += ' ' + errData.error;
+          }
+        } catch (_) {
+          try {
+            const txt = await res.text();
+            if (txt) errMsg += ' ' + txt;
+          } catch (_) {}
+        }
+        throw new Error(errMsg);
       }
+
       
       const blob = await res.blob()
       const downloadUrl = window.URL.createObjectURL(blob)

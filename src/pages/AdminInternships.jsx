@@ -536,6 +536,7 @@ export default function AdminInternships() {
           throw new Error('File not found on the server. Please check if the file was physically uploaded or deleted.')
         }
         let errMsg = 'Download request rejected by server.';
+        const clone = res.clone();
         try {
           const errData = await res.json();
           if (errData && errData.error) {
@@ -543,12 +544,13 @@ export default function AdminInternships() {
           }
         } catch (_) {
           try {
-            const txt = await res.text();
+            const txt = await clone.text();
             if (txt) errMsg += ' ' + txt;
           } catch (_) {}
         }
         throw new Error(errMsg);
       }
+
 
       
       const blob = await res.blob()

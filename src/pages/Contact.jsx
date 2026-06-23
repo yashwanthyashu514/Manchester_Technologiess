@@ -4,7 +4,7 @@ import { Mail, Phone, MapPin, MessageCircle, Send, CheckCircle, AlertCircle } fr
 import AnimatedSection from '../components/AnimatedSection'
 
 export default function Contact() {
-  const [formData, setFormData] = useState({ name: '', email: '', message: '' })
+  const [formData, setFormData] = useState({ name: '', email: '', message: '', projectType: '' })
   const [errors, setErrors] = useState({})
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -153,6 +153,17 @@ export default function Contact() {
                       <label htmlFor="email" className="block text-sm font-medium text-text-primary mb-2">Email</label>
                       <input type="email" id="email" name="email" value={formData.email} onChange={handleChange} className={`w-full px-4 py-3 rounded-xl bg-background border transition-all duration-200 outline-none focus:ring-2 focus:ring-accent/50 ${errors.email ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-accent/50'}`} placeholder="you@company.com" />
                       {errors.email && <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 text-red-400 text-xs mt-2"><AlertCircle className="w-3 h-3" />{errors.email}</motion.p>}
+                    </div>
+                    <div>
+                      <label htmlFor="projectType" className="block text-sm font-medium text-text-primary mb-2">Project Type</label>
+                      <select id="projectType" name="projectType" value={formData.projectType} onChange={handleChange} className="w-full px-4 py-3 rounded-xl bg-background border border-white/10 focus:border-accent/50 transition-all duration-200 outline-none focus:ring-2 focus:ring-accent/50 text-text-primary">
+                        <option value="">Select project type...</option>
+                        <option value="freelance">Freelance / Contract Development</option>
+                        <option value="mvp">Startup MVP (Minimum Viable Product)</option>
+                        <option value="enterprise">Enterprise / Full-Scale Software</option>
+                        <option value="internship">Internship / Training Program</option>
+                        <option value="other">Other Queries</option>
+                      </select>
                     </div>
                     <div>
                       <label htmlFor="message" className="block text-sm font-medium text-text-primary mb-2">Message</label>

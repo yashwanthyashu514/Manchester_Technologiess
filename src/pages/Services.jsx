@@ -187,6 +187,38 @@ export default function Services() {
         </div>
       </section>
 
+      {/* Freelance Engagement Info */}
+      <section className="section-padding py-12 max-w-7xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="relative overflow-hidden rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/5 via-secondary/10 to-accent/5 p-8 md:p-12"
+        >
+          <div className="absolute top-0 right-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+            <div className="lg:col-span-2">
+              <span className="inline-block px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-xs font-semibold uppercase tracking-wider mb-4">
+                Flexible Freelance Engagement
+              </span>
+              <h3 className="heading-md mb-3 text-left">Looking for Contract or Freelance Developers?</h3>
+              <p className="body-md text-text-secondary">
+                We support flexible hourly, fixed-price, and monthly retainer contract structures. Get direct access to senior developers and designers without the overhead of full-time hiring. Perfect for startups building MVPs, agencies needing backup talent, or businesses needing custom software integrations.
+              </p>
+            </div>
+            <div className="flex justify-start lg:justify-end">
+              <Link to="/contact">
+                <button className="glow-button flex items-center gap-2">
+                  Discuss Freelance Projects
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
       {/* CTA */}
       <section className="section-padding py-24 max-w-7xl mx-auto">
         <motion.div

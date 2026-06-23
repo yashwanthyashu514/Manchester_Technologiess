@@ -16,6 +16,7 @@ import {
   ArrowRight,
   MessageCircle,
   ChevronRight,
+  Check,
 } from 'lucide-react'
 import AnimatedSection from '../components/AnimatedSection'
 import ServiceCard from '../components/ServiceCard'
@@ -179,7 +180,7 @@ export default function Home() {
           >
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              Available for projects
+              Available for Freelance & Custom Projects
             </div>
             <div className="hidden sm:block w-px h-4 bg-white/10" />
             <div className="hidden sm:block">50+ Projects Delivered</div>
@@ -320,6 +321,68 @@ export default function Home() {
           {portfolioProjects.map((project, index) => (
             <PortfolioCard key={project.title} {...project} index={index} />
           ))}
+        </div>
+      </section>
+
+      {/* Freelance & Collaboration Section */}
+      <section className="section-padding py-24 bg-secondary/20">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <AnimatedSection>
+              <span className="text-accent text-sm font-medium tracking-wider uppercase">Freelance & Consulting</span>
+              <h2 className="heading-lg mt-3 mb-6">Open for Freelance Contracts</h2>
+              <p className="body-lg mb-6">
+                Have a tight deadline, need a prototype/MVP built, or need specialist hands on an ongoing codebase? We offer flexible freelance and contract models tailored for your project.
+              </p>
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-3 h-3 text-accent" />
+                  </div>
+                  <span className="body-md text-sm">MVP & Rapid Prototyping (Launch in 2-4 weeks)</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-3 h-3 text-accent" />
+                  </div>
+                  <span className="body-md text-sm">Hourly Consulting & System Integration</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-3 h-3 text-accent" />
+                  </div>
+                  <span className="body-md text-sm">Flexible Retainer & Part-time Development Roles</span>
+                </li>
+              </ul>
+              <Link to="/contact">
+                <button className="glow-button flex items-center gap-2">
+                  Hire Us for Freelancing
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+            </AnimatedSection>
+            
+            <AnimatedSection delay={0.2}>
+              <div className="glass-card p-8 md:p-10 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-2xl" />
+                <h3 className="font-heading font-semibold text-xl mb-6">Our Contract Framework</h3>
+                <div className="space-y-6">
+                  <div className="border-l-2 border-accent pl-4">
+                    <p className="font-heading font-semibold text-sm mb-1">01. Clear Milestones</p>
+                    <p className="text-text-secondary text-sm">We define milestones so you pay only as goals are hit and verified.</p>
+                  </div>
+                  <div className="border-l-2 border-accent/60 pl-4">
+                    <p className="font-heading font-semibold text-sm mb-1">02. IP & Source Ownership</p>
+                    <p className="text-text-secondary text-sm">Complete handover of intellectual property and clean Git repositories on completion.</p>
+                  </div>
+                  <div className="border-l-2 border-accent/30 pl-4">
+                    <p className="font-heading font-semibold text-sm mb-1">03. Weekly Updates & Demos</p>
+                    <p className="text-text-secondary text-sm">Iterative delivery with live builds updated weekly so you are always in the loop.</p>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
         </div>
       </section>
 

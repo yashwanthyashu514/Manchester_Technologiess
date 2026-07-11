@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { FileText, Printer, Download, ChevronLeft, Loader2, ShieldCheck, HelpCircle } from 'lucide-react'
-import AnimatedSection from '../components/AnimatedSection'
 
 export default function AdminViewSignedTc() {
   const { id } = useParams()
@@ -12,6 +10,14 @@ export default function AdminViewSignedTc() {
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const [isDownloading, setIsDownloading] = useState(false)
+
+  // PDF.js State
+  const [pdfDoc, setPdfDoc] = useState(null)
+  const [pagesRendered, setPagesRendered] = useState([])
+  const [pdfLoadingError, setPdfLoadingError] = useState(null)
+  const [isPdfLoading, setIsPdfLoading] = useState(true)
+
+  const viewerContainerRef = useRef(null)
 
   // 1. Fetch Signed T&C Details
   useEffect(() => {
@@ -42,7 +48,109 @@ export default function AdminViewSignedTc() {
     fetchSignedDetails()
   }, [id])
 
-  // 2. Download Signed PDF Handler
+  // 2. Load PDF.js dynamically
+  useEffect(() => {
+    if (isLoading || error || !data) return
+
+    const loadPdfJs = async () => {
+      if (window.pdfjsLib) {
+        initPdf('/manchestertechnologiestandc.pdf')
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js'
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js'
+        initPdf('/manchestertechnologiestandc.pdf')
+      }
+      script.onerror = () => {
+        setPdfLoadingError('Failed to load PDF viewer library.')
+        setIsPdfLoading(false)
+      }
+      document.head.appendChild(script)
+    }
+
+    loadPdfJs()
+  }, [isLoading, error, data])
+
+  const initPdf = async (pdfUrl) => {
+    try {
+      const loadingTask = window.pdfjsLib.getDocument(pdfUrl)
+      const pdf = await loadingTask.promise
+      setPdfDoc(pdf)
+      
+      const renderedPagesArray = []
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        renderedPagesArray.push(pageNum)
+      }
+      setPagesRendered(renderedPagesArray)
+      setIsPdfLoading(false)
+    } catch (err) {
+      console.error('PDF loading error:', err)
+      setPdfLoadingError('Failed to load the original Terms & Conditions PDF.')
+      setIsPdfLoading(false)
+    }
+  }
+
+  // 3. Crisp PDF Canvas Renderer Component
+  const PdfPageCanvas = ({ pageNumber, pdfDocument }) => {
+    const canvasRef = useRef(null)
+
+    useEffect(() => {
+      if (!pdfDocument || !canvasRef.current) return
+
+      let renderTask = null;
+      const renderPage = async () => {
+        try {
+          const page = await pdfDocument.getPage(pageNumber)
+          const canvas = canvasRef.current
+          const context = canvas.getContext('2d')
+
+          // Lock to target design width for standard desktop/print alignment (720px)
+          const viewportWidth = viewerContainerRef.current ? viewerContainerRef.current.clientWidth - 48 : 720
+          const initialViewport = page.getViewport({ scale: 1 })
+          const scale = viewportWidth / initialViewport.width
+          const viewport = page.getViewport({ scale: scale })
+
+          const dpr = window.devicePixelRatio || 1
+          canvas.width = viewport.width * dpr
+          canvas.height = viewport.height * dpr
+          canvas.style.width = `${viewport.width}px`
+          canvas.style.height = `${viewport.height}px`
+
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport,
+            transform: [dpr, 0, 0, dpr, 0, 0]
+          }
+
+          renderTask = page.render(renderContext)
+          await renderTask.promise
+        } catch (err) {
+          if (err.name !== 'RenderingCancelledException') {
+            console.error('Error rendering page:', err)
+          }
+        }
+      }
+
+      renderPage()
+
+      return () => {
+        if (renderTask) {
+          renderTask.cancel()
+        }
+      }
+    }, [pageNumber, pdfDocument])
+
+    return (
+      <div className="bg-white p-2 rounded shadow border border-black/5 mb-6 flex justify-center overflow-x-auto print:border-none print:shadow-none print:p-0 print:m-0 print:break-after-page">
+        <canvas ref={canvasRef} className="max-w-full block" />
+      </div>
+    )
+  }
+
+  // 4. Download Signed PDF Handler
   const handleDownloadPDF = async () => {
     setIsDownloading(true)
     const token = localStorage.getItem('token')
@@ -56,7 +164,6 @@ export default function AdminViewSignedTc() {
         throw new Error(err.error || 'Failed to download PDF.')
       }
 
-      // Stream the blob
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -73,7 +180,6 @@ export default function AdminViewSignedTc() {
     }
   }
 
-  // 3. Print Handler
   const handlePrint = () => {
     window.print()
   }
@@ -213,7 +319,10 @@ export default function AdminViewSignedTc() {
         </div>
 
         {/* The Printable Signed Contract Sheet Container */}
-        <div className="glass-card p-8 md:p-12 border border-white/5 bg-background/40 shadow-2xl space-y-8 print-container print-text-dark">
+        <div 
+          ref={viewerContainerRef} 
+          className="glass-card p-6 md:p-12 border border-white/5 bg-background/40 shadow-2xl space-y-8 print-container print-text-dark"
+        >
           
           {/* Header */}
           <div className="flex justify-between items-end border-b border-white/10 pb-6 print-header">
@@ -226,43 +335,32 @@ export default function AdminViewSignedTc() {
             </div>
           </div>
 
-          {/* Original Terms and Conditions Text Content summary */}
-          <div className="space-y-6 text-xs text-text-secondary leading-relaxed print-text-dark">
-            <h3 className="font-heading font-bold text-white print-text-dark text-sm border-l-2 border-accent pl-3">Original Terms & Conditions Agreement</h3>
+          {/* Render Actual PDF Pages Dynamically */}
+          <div className="space-y-4 print-container">
+            <h3 className="font-heading font-bold text-white print-text-dark text-sm border-l-2 border-accent pl-3 no-print">
+              Original Terms & Conditions Document
+            </h3>
             
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 bg-black/20 p-4 rounded-lg border border-white/5 print-container print-text-dark print:max-h-none print:overflow-visible print:p-0 print:border-none">
-              <p>
-                <strong>1. SCOPE AND NATURE OF INTERNSHIP:</strong> The internship is designed to provide you with practical experience, professional training, and mentorship in your selected technology domain. It is an educational program, and your participation does not guarantee future full-time employment at Manchester Technologies. You are expected to fulfill the tasks assigned by your mentor in a timely manner and adhere to the scheduled project timelines.
-              </p>
-              <p>
-                <strong>2. INTELLECTUAL PROPERTY RIGHTS:</strong> All work products, codebases, designs, documentation, repositories, tools, data, algorithms, and applications created, written, or developed by you, either individually or jointly with others, during the course of your internship with Manchester Technologies, shall be the sole and exclusive property of Manchester Technologies. You hereby assign all rights, titles, and interests in and to such intellectual property to the company. You agree not to copy, upload, distribute, or otherwise use these repositories or intellectual property outside the scope of your internship tasks without explicit written authorization.
-              </p>
-              <p>
-                <strong>3. CODE OF CONDUCT AND DISCIPLINE:</strong> As an intern, you represent Manchester Technologies. You are required to maintain the highest standards of professional conduct, integrity, and respect toward team members, mentors, and administrators. Manchester Technologies reserves the right to terminate your internship immediately without compensation or certificate issuance in cases of misconduct, plagiarism, lack of progress, unauthorized sharing of work, or violation of internal policies.
-              </p>
-              <p>
-                <strong>4. CONFIDENTIALITY AGREEMENT (NON-DISCLOSURE):</strong> During your internship, you may have access to proprietary information, trade secrets, business processes, client lists, customer information, internal credentials, staging links, and source code. All such details constitute "Confidential Information" and must be kept strictly confidential. You shall not disclose, print, or distribute any Confidential Information to any third party, family members, or on social media platforms (including but not limited to LinkedIn, GitHub, and Twitter) during or after your internship. Your obligations under this section shall survive the termination of your internship indefinitely.
-              </p>
-              <p>
-                <strong>5. WORK HOURS AND TIMELINE ASSIGNMENT:</strong> You are required to dedicate the minimum agreed hours per day to your assigned tasks and participate in status checks or milestone updates as requested by your mentor. Failure to demonstrate consistent activity or update progress in the Intern Workspace for five (5) consecutive working days without prior approved leave may result in automatic deletion of your internship allocation and certificate revocation.
-              </p>
-              <p>
-                <strong>6. STIPEND AND COMPENSATION CONDITIONS:</strong> Any stipend, compensation, or reimbursement associated with your internship, if applicable, is strictly contingent upon satisfactory and complete fulfillment of all assigned tasks, final project review approval by your mentor, and successful submission of the final internship documentation. No partial stipend will be paid for incomplete or terminated internships.
-              </p>
-              <p>
-                <strong>7. INTERNSHIP CERTIFICATE ISSUANCE:</strong> An internship completion certificate will be generated and issued to you only after: (a) completion of the entire duration of the internship; (b) successful completion of all assigned checklist items; (c) approval of your code reviews and mentor feedback; and (d) successful return of all digital assets or documentation. The certificate will feature a unique, verified QR code logged permanently in the Manchester Technologies verification ledger.
-              </p>
-              <p>
-                <strong>8. LIMITATION OF LIABILITY AND INDEMNITY:</strong> Manchester Technologies shall not be held liable for any damages, losses, or injuries sustained by you during the internship, whether physical, financial, or technical. You agree to defend, indemnify, and hold harmless Manchester Technologies, its directors, officers, employees, and agents from any claims, liability, damages, or costs arising out of your negligence, misconduct, or breach of these terms.
-              </p>
-              <p>
-                <strong>9. ACCEPTANCE AND ACKNOWLEDGMENT:</strong> By signing this document digitally through the Manchester Technologies Portal, you acknowledge that you have read, understood, and agreed to all the rules, conditions, confidentiality regulations, and intellectual property rights described herein. Your digital signature serves as a legally binding acceptance of these Terms & Conditions.
-              </p>
-            </div>
+            {isPdfLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-text-secondary">
+                <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                <span>Loading original PDF content...</span>
+              </div>
+            ) : pdfLoadingError ? (
+              <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-lg text-xs text-red-400">
+                {pdfLoadingError}
+              </div>
+            ) : (
+              <div className="space-y-4 print:space-y-0">
+                {pagesRendered.map((pageNum) => (
+                  <PdfPageCanvas key={pageNum} pageNumber={pageNum} pdfDocument={pdfDoc} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Candidate Profile Details Grid */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-4 print-card">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-4 print-card print:break-before-page">
             <h4 className="text-xs font-bold text-white print-text-dark uppercase tracking-wider">Candidate & Audit Details</h4>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-xs">
@@ -294,7 +392,7 @@ export default function AdminViewSignedTc() {
 
             <div className="border-t border-white/5 pt-4 text-xs">
               <span className="text-text-muted block uppercase text-[10px] mb-1">Acceptance Statement</span>
-              <p className="text-white print-text-dark italic font-semibold">
+              <p className="text-white print-text-dark italic font-semibold font-body">
                 "I confirm that I have read and accepted all Terms & Conditions of Manchester Technologies Internship Program."
               </p>
             </div>

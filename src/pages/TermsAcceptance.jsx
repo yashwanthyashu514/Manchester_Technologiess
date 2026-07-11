@@ -256,9 +256,26 @@ export default function TermsAcceptance() {
       </main>
     )
   }
-
   return (
     <main className="pt-20 min-h-screen pb-16">
+      {/* Custom Styles for premium custom scrollbar and scroll momentum on Safari/iOS */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .pdf-viewer-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .pdf-viewer-scroll::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+          border-radius: 4px;
+        }
+        .pdf-viewer-scroll::-webkit-scrollbar-thumb {
+          background: rgba(200, 169, 106, 0.3);
+          border-radius: 4px;
+        }
+        .pdf-viewer-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(200, 169, 106, 0.6);
+        }
+      `}} />
+
       <section className="section-padding py-8 max-w-4xl mx-auto space-y-8">
         
         {/* Header Section */}
@@ -311,7 +328,8 @@ export default function TermsAcceptance() {
         <div 
           ref={viewerContainerRef}
           onScroll={handleScroll}
-          className="h-[500px] overflow-y-auto bg-black/60 border border-white/10 rounded-xl p-4 md:p-6 shadow-2xl relative scroll-smooth"
+          className="pdf-viewer-scroll h-[500px] overflow-y-auto bg-black/60 border border-white/10 rounded-xl p-4 md:p-6 shadow-2xl relative scroll-smooth touch-pan-y"
+          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
         >
           {!pdfDoc ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-text-secondary bg-background/90">

@@ -8,6 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import { PDFDocument as LibPDFDocument } from 'pdf-lib';
 
 import {
   initDb,
@@ -447,191 +448,187 @@ app.get('/api/test-smtp', async (req, res) => {
    ========================================================================= */
 
 // Helper: Generate Signed Agreement PDF
+// Helper: Generate Signed Agreement PDF using pdf-lib (strictly dynamic)
 const generateSignedAgreementPDF = async (appData, outputPath) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({
-        size: 'A4',
-        margins: { top: 50, bottom: 50, left: 50, right: 50 }
+  try {
+    const pdfPath = path.join(__dirname, '..', 'public', 'manchestertechnologiestandc.pdf');
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error('Original Terms & Conditions PDF file not found.');
+    }
+    const existingPdfBytes = fs.readFileSync(pdfPath);
+    const pdfDoc = await LibPDFDocument.load(existingPdfBytes);
+
+    // Add a blank page for signature block
+    const page = pdfDoc.addPage([595.28, 841.89]);
+    const { width, height } = page.getSize();
+
+    const fontBold = await pdfDoc.embedFont('Helvetica-Bold');
+    const fontRegular = await pdfDoc.embedFont('Helvetica');
+    const fontOblique = await pdfDoc.embedFont('Helvetica-Oblique');
+
+    const drawHeader = () => {
+      page.drawRectangle({
+        x: 0,
+        y: height - 15,
+        width: width,
+        height: 15,
+        color: rgb(200 / 255, 169 / 255, 106 / 255)
+      });
+      page.drawText('MANCHESTER TECHNOLOGIES', {
+        x: 50,
+        y: height - 35,
+        size: 10,
+        font: fontBold,
+        color: rgb(26 / 255, 26 / 255, 26 / 255)
+      });
+      page.drawText(`Signed Internship Agreement | Page ${pdfDoc.getPageCount()}`, {
+        x: width - 210,
+        y: height - 35,
+        size: 8,
+        font: fontRegular,
+        color: rgb(85 / 255, 85 / 255, 85 / 255)
+      });
+      page.drawLine({
+        start: { x: 50, y: height - 42 },
+        end: { x: width - 50, y: height - 42 },
+        thickness: 0.5,
+        color: rgb(229 / 255, 229 / 255, 229 / 255)
+      });
+    };
+
+    const drawFooter = () => {
+      page.drawLine({
+        start: { x: 50, y: 55 },
+        end: { x: width - 50, y: 55 },
+        thickness: 0.5,
+        color: rgb(229 / 255, 229 / 255, 229 / 255)
+      });
+      page.drawText(`Verified Secure Digital Signature Agreement. Application ID: ${appData.application_id}`, {
+        x: 100,
+        y: 42,
+        size: 8,
+        font: fontRegular,
+        color: rgb(85 / 255, 85 / 255, 85 / 255)
+      });
+    };
+
+    drawHeader();
+
+    page.drawText('CANDIDATE SIGNATURE & RECORD OF ACCEPTANCE', {
+      x: 140,
+      y: height - 75,
+      size: 13,
+      font: fontBold,
+      color: rgb(200 / 255, 169 / 255, 106 / 255)
+    });
+
+    page.drawRectangle({
+      x: 50,
+      y: height - 250,
+      width: width - 100,
+      height: 155,
+      borderColor: rgb(200 / 255, 169 / 255, 106 / 255),
+      borderWidth: 1
+    });
+
+    const drawDetailRow = (label, val, yVal) => {
+      page.drawText(label, { x: 70, y: yVal, size: 9, font: fontBold });
+      page.drawText(val, { x: 200, y: yVal, size: 9, font: fontRegular });
+    };
+
+    drawDetailRow('Candidate Name:', appData.full_name || 'N/A', height - 120);
+    drawDetailRow('Candidate Email:', appData.email || 'N/A', height - 140);
+    drawDetailRow('Application ID:', appData.application_id || 'N/A', height - 160);
+    drawDetailRow('Date of Signing:', new Date(appData.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), height - 180);
+    drawDetailRow('Status:', 'Terms & Conditions Accepted', height - 200);
+    drawDetailRow('Signed Version:', appData.signedPdfVersion || 'manchestertechnologiestandc.pdf', height - 220);
+
+    page.drawText('Acceptance Statement:', {
+      x: 50,
+      y: height - 275,
+      size: 10,
+      font: fontBold
+    });
+    page.drawText('"I confirm that I have read and accepted all Terms & Conditions of Manchester Technologies Internship Program."', {
+      x: 50,
+      y: height - 295,
+      size: 9,
+      font: fontOblique,
+      color: rgb(85 / 255, 85 / 255, 85 / 255)
+    });
+
+    page.drawText('Digital Signature (Drawn):', {
+      x: 50,
+      y: height - 325,
+      size: 10,
+      font: fontBold
+    });
+
+    if (appData.signatureImage) {
+      const base64Data = appData.signatureImage.replace(/^data:image\/png;base64,/, "");
+      const sigBuffer = Buffer.from(base64Data, 'base64');
+      const signatureImage = await pdfDoc.embedPng(sigBuffer);
+      
+      page.drawRectangle({
+        x: 150,
+        y: height - 480,
+        width: 300,
+        height: 120,
+        borderColor: rgb(229 / 255, 229 / 255, 229 / 255),
+        borderWidth: 0.5
       });
 
-      const stream = fs.createWriteStream(outputPath);
-      doc.pipe(stream);
-
-      const primaryColor = '#C8A96A';
-      const darkColor = '#1A1A1A';
-      const grayColor = '#555555';
-
-      const drawHeader = (pageNumber) => {
-        doc.fillColor(primaryColor).rect(0, 0, 595.28, 15).fill();
-        doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10)
-           .text('MANCHESTER TECHNOLOGIES', 50, 30, { align: 'left' });
-        doc.fillColor(grayColor).font('Helvetica').fontSize(8)
-           .text(`Signed Internship Agreement | Page ${pageNumber}`, 50, 30, { align: 'right' });
-        doc.strokeColor('#E5E5E5').lineWidth(0.5).moveTo(50, 42).lineTo(545.28, 42).stroke();
-      };
-
-      const drawFooter = () => {
-        doc.strokeColor('#E5E5E5').lineWidth(0.5).moveTo(50, 785).lineTo(545.28, 785).stroke();
-        doc.fillColor(grayColor).font('Helvetica').fontSize(8)
-           .text(`Verified Secure Digital Signature Agreement. Application ID: ${appData.application_id}`, 50, 792, { align: 'center' });
-      };
-
-      // PAGE 1
-      drawHeader(1);
-      doc.y = 60;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(18)
-         .text('SIGNED INTERNSHIP AGREEMENT', { align: 'center' });
-      doc.y = 80;
-      doc.fillColor(darkColor).font('Helvetica-Oblique').fontSize(9)
-         .text(`This document serves as a binding agreement and proof of acceptance of the Internship Program Terms & Conditions by the candidate listed below.`, { align: 'center' });
-      
-      doc.y = 110;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('1. SCOPE AND NATURE OF INTERNSHIP');
-      doc.y = 125;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('The internship is designed to provide you with practical experience, professional training, and mentorship in your selected technology domain. It is an educational program, and your participation does not guarantee future full-time employment at Manchester Technologies. You are expected to fulfill the tasks assigned by your mentor in a timely manner and adhere to the scheduled project timelines.', { leading: 12 });
-
-      doc.y = 195;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('2. INTELLECTUAL PROPERTY RIGHTS');
-      doc.y = 210;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('All work products, codebases, designs, documentation, repositories, tools, data, algorithms, and applications created, written, or developed by you, either individually or jointly with others, during the course of your internship with Manchester Technologies, shall be the sole and exclusive property of Manchester Technologies. You hereby assign all rights, titles, and interests in and to such intellectual property to the company. You agree not to copy, upload, distribute, or otherwise use these repositories or intellectual property outside the scope of your internship tasks without explicit written authorization.', { leading: 12 });
-
-      doc.y = 300;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('3. CODE OF CONDUCT AND DISCIPLINE');
-      doc.y = 315;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('As an intern, you represent Manchester Technologies. You are required to maintain the highest standards of professional conduct, integrity, and respect toward team members, mentors, and administrators. Manchester Technologies reserves the right to terminate your internship immediately without compensation or certificate issuance in cases of misconduct, plagiarism, lack of progress, unauthorized sharing of work, or violation of internal policies.', { leading: 12 });
-
-      doc.y = 405;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('4. CONFIDENTIALITY AGREEMENT (NON-DISCLOSURE)');
-      doc.y = 420;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('During your internship, you may have access to proprietary information, trade secrets, business processes, client lists, customer information, internal credentials, staging links, and source code. All such details constitute "Confidential Information" and must be kept strictly confidential. You shall not disclose, print, or distribute any Confidential Information to any third party, family members, or on social media platforms (including but not limited to LinkedIn, GitHub, and Twitter) during or after your internship. Your obligations under this section shall survive the termination of your internship indefinitely.', { leading: 12 });
-
-      drawFooter();
-
-      // PAGE 2
-      doc.addPage();
-      drawHeader(2);
-
-      doc.y = 60;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('5. WORK HOURS AND TIMELINE ASSIGNMENT');
-      doc.y = 75;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('You are required to dedicate the minimum agreed hours per day to your assigned tasks and participate in status checks or milestone updates as requested by your mentor. Failure to demonstrate consistent activity or update progress in the Intern Workspace for five (5) consecutive working days without prior approved leave may result in automatic deletion of your internship allocation and certificate revocation.', { leading: 12 });
-
-      doc.y = 145;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('6. STIPEND AND COMPENSATION CONDITIONS');
-      doc.y = 160;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('Any stipend, compensation, or reimbursement associated with your internship, if applicable, is strictly contingent upon satisfactory and complete fulfillment of all assigned tasks, final project review approval by your mentor, and successful submission of the final internship documentation. No partial stipend will be paid for incomplete or terminated internships.', { leading: 12 });
-
-      doc.y = 225;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('7. INTERNSHIP CERTIFICATE ISSUANCE');
-      doc.y = 240;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('An internship completion certificate will be generated and issued to you only after: (a) completion of the entire duration of the internship; (b) successful completion of all assigned checklist items; (c) approval of your code reviews and mentor feedback; and (d) successful return of all digital assets or documentation. The certificate will feature a unique, verified QR code logged permanently in the Manchester Technologies verification ledger.', { leading: 12 });
-
-      doc.y = 315;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('8. LIMITATION OF LIABILITY AND INDEMNITY');
-      doc.y = 330;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('Manchester Technologies shall not be held liable for any damages, losses, or injuries sustained by you during the internship, whether physical, financial, or technical. You agree to defend, indemnify, and hold harmless Manchester Technologies, its directors, officers, employees, and agents from any claims, liability, damages, or costs arising out of your negligence, misconduct, or breach of these terms.', { leading: 12 });
-
-      doc.y = 405;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
-         .text('9. ACCEPTANCE AND ACKNOWLEDGMENT');
-      doc.y = 420;
-      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
-         .text('By signing this document digitally through the Manchester Technologies Portal, you acknowledge that you have read, understood, and agreed to all the rules, conditions, confidentiality regulations, and intellectual property rights described herein. Your digital signature serves as a legally binding acceptance of these Terms & Conditions.', { leading: 12 });
-
-      drawFooter();
-
-      // PAGE 3
-      doc.addPage();
-      drawHeader(3);
-
-      doc.y = 60;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(14)
-         .text('CANDIDATE SIGNATURE & RECORD OF ACCEPTANCE', { align: 'center' });
-
-      doc.strokeColor(primaryColor).lineWidth(1)
-         .rect(50, 90, 495.28, 140).stroke();
-
-      doc.y = 105;
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10);
-      
-      const renderDetailRow = (label, val, yVal) => {
-        doc.text(label, 70, yVal);
-        doc.font('Helvetica').text(val, 200, yVal);
-        doc.font('Helvetica-Bold');
-      };
-
-      renderDetailRow('Candidate Name:', appData.full_name, 110);
-      renderDetailRow('Candidate Email:', appData.email, 130);
-      renderDetailRow('Application ID:', appData.application_id, 150);
-      renderDetailRow('Date of Signing:', new Date(appData.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), 170);
-      renderDetailRow('Status:', 'Terms & Conditions Accepted', 190);
-      renderDetailRow('Signed Version:', appData.signedPdfVersion || 'manchestertechnologiestandc.pdf', 210);
-
-      doc.y = 260;
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(11)
-         .text('Acceptance Statement:');
-      doc.y = 280;
-      doc.fillColor(grayColor).font('Helvetica').fontSize(10)
-         .text('"I confirm that I have read and accepted all Terms & Conditions of Manchester Technologies Internship Program."', { align: 'left' });
-
-      doc.y = 330;
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(11)
-         .text('Digital Signature (Drawn):');
-
-      if (appData.signatureImage) {
-        const base64Data = appData.signatureImage.replace(/^data:image\/png;base64,/, "");
-        const tempSigPath = path.join(UPLOADS_DIR, `temp-sig-${appData.application_id}.png`);
-        fs.writeFileSync(tempSigPath, base64Data, 'base64');
-        
-        doc.image(tempSigPath, 150, 360, { width: 300, height: 120 });
-        
-        stream.on('finish', () => {
-          try {
-            if (fs.existsSync(tempSigPath)) fs.unlinkSync(tempSigPath);
-          } catch (e) {
-            console.error('Temp signature unlink error:', e);
-          }
-        });
-      } else {
-        doc.font('Helvetica-Oblique').fontSize(10).text('No signature captured', 150, 370);
-      }
-
-      doc.strokeColor('#E5E5E5').lineWidth(0.5)
-         .rect(50, 520, 495.28, 90).stroke();
-      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(9).text('Security Audit Logs:', 60, 530);
-      
-      doc.fillColor(grayColor).font('Helvetica').fontSize(8);
-      doc.text(`Browser Agent: ${appData.browserInfo || 'N/A'}`, 60, 550);
-      doc.text(`Device Model: ${appData.deviceInfo || 'N/A'}`, 60, 565);
-      doc.text(`IP Address Logged: ${appData.ipAddress || 'N/A'}`, 60, 580);
-      doc.text(`Audit Signature Hash: SECURE_LEDGER_CONFIRMED_${appData.application_id}`, 60, 595);
-
-      drawFooter();
-
-      doc.end();
-      stream.on('finish', () => resolve());
-      stream.on('error', (err) => reject(err));
-    } catch (err) {
-      reject(err);
+      page.drawImage(signatureImage, {
+        x: 155,
+        y: height - 475,
+        width: 290,
+        height: 110
+      });
+    } else {
+      page.drawText('No signature captured', {
+        x: 150,
+        y: height - 360,
+        size: 9,
+        font: fontOblique,
+        color: rgb(85 / 255, 85 / 255, 85 / 255)
+      });
     }
-  });
+
+    page.drawRectangle({
+      x: 50,
+      y: 80,
+      width: width - 100,
+      height: 110,
+      borderColor: rgb(229 / 255, 229 / 255, 229 / 255),
+      borderWidth: 0.5
+    });
+
+    page.drawText('Security Audit Logs:', {
+      x: 60,
+      y: 175,
+      size: 9,
+      font: fontBold
+    });
+
+    const drawAuditRow = (label, val, yVal) => {
+      page.drawText(label, { x: 60, y: yVal, size: 8, font: fontBold, color: rgb(85 / 255, 85 / 255, 85 / 255) });
+      const valStr = String(val).substring(0, 85);
+      page.drawText(valStr, { x: 140, y: yVal, size: 8, font: fontRegular, color: rgb(85 / 255, 85 / 255, 85 / 255) });
+    };
+
+    drawAuditRow('Browser Agent:', appData.browserInfo || 'N/A', 155);
+    drawAuditRow('Device Profile:', appData.deviceInfo || 'N/A', 135);
+    drawAuditRow('Logged IP:', appData.ipAddress || 'N/A', 115);
+    drawAuditRow('Security Hash:', `SECURE_LEDGER_CONFIRMED_${appData.application_id}`, 95);
+
+    drawFooter();
+
+    const pdfBytes = await pdfDoc.save();
+    fs.writeFileSync(outputPath, pdfBytes);
+  } catch (err) {
+    console.error('pdf-lib generation failed:', err);
+    throw err;
+  }
 };
 
 // Check T&C Acceptance Eligibility

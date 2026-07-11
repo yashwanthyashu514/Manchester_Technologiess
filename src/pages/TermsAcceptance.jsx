@@ -27,6 +27,7 @@ export default function TermsAcceptance() {
   const [showModal, setShowModal] = useState(false)
 
   const viewerContainerRef = useRef(null)
+  const bottomMarkerRef = useRef(null)
 
   // 1. Verify Eligibility on Load
   useEffect(() => {
@@ -49,7 +50,6 @@ export default function TermsAcceptance() {
         }
 
         if (result.termsAccepted) {
-          // Redirect to status or show already signed
           navigate(`/internships/status?appId=${appId}&email=${email}`)
           return
         }
@@ -98,7 +98,6 @@ export default function TermsAcceptance() {
       setNumPages(pdf.numPages)
       
       const renderedPagesArray = []
-      // Render pages sequentially onto canvases
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         renderedPagesArray.push(pageNum)
       }
@@ -109,7 +108,7 @@ export default function TermsAcceptance() {
     }
   }
 
-  // 3. Render page canvas helper
+  // 3. Render page canvas helper (Crisp rendering + auto scaling)
   const PdfPageCanvas = ({ pageNumber, pdfDocument }) => {
     const canvasRef = useRef(null)
 
@@ -124,17 +123,22 @@ export default function TermsAcceptance() {
           const context = canvas.getContext('2d')
 
           // Calculate viewport based on container width
-          const parentWidth = viewerContainerRef.current ? viewerContainerRef.current.clientWidth - 32 : 600
+          const parentWidth = viewerContainerRef.current ? viewerContainerRef.current.clientWidth - 48 : 600
           const initialViewport = page.getViewport({ scale: 1 })
           const scale = parentWidth / initialViewport.width
           const viewport = page.getViewport({ scale: scale })
 
-          canvas.height = viewport.height
-          canvas.width = viewport.width
+          // High-DPI/Retina Screen Scaling
+          const dpr = window.devicePixelRatio || 1
+          canvas.width = viewport.width * dpr
+          canvas.height = viewport.height * dpr
+          canvas.style.width = `${viewport.width}px`
+          canvas.style.height = `${viewport.height}px`
 
           const renderContext = {
             canvasContext: context,
-            viewport: viewport
+            viewport: viewport,
+            transform: [dpr, 0, 0, dpr, 0, 0] // Apply scale transformation
           }
 
           renderTask = page.render(renderContext)
@@ -156,8 +160,8 @@ export default function TermsAcceptance() {
     }, [pageNumber, pdfDocument])
 
     return (
-      <div className="bg-white p-2 md:p-4 rounded-lg shadow-xl border border-white/10 mb-6 flex justify-center">
-        <canvas ref={canvasRef} className="max-w-full" />
+      <div className="bg-white p-2 md:p-4 rounded-lg shadow-xl border border-white/5 mb-6 flex justify-center overflow-x-auto">
+        <canvas ref={canvasRef} className="max-w-full block" />
       </div>
     )
   }
@@ -169,20 +173,45 @@ export default function TermsAcceptance() {
 
     if (scrollHeight - clientHeight <= 0) return
 
-    // Calculate percentage
+    // Calculate percentage based on scroll position
     const currentProgress = Math.min(100, Math.round((scrollTop / (scrollHeight - clientHeight)) * 100))
     setScrollProgress(currentProgress)
-
-    // Complete reading criteria (>= 98% scrolled)
-    if (currentProgress >= 98) {
-      setPdfReadComplete(true)
-    }
   }
+
+  // 5. IntersectionObserver for absolute bottom detection
+  useEffect(() => {
+    if (!pdfDoc || pagesRendered.length === 0) return
+
+    const observerOptions = {
+      root: viewerContainerRef.current,
+      rootMargin: '0px 0px 50px 0px', // Trigger slightly before reaching bottom for better UX
+      threshold: 0.1
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setPdfReadComplete(true)
+          setScrollProgress(100)
+        }
+      })
+    }, observerOptions)
+
+    const target = bottomMarkerRef.current
+    if (target) {
+      observer.observe(target)
+    }
+
+    return () => {
+      if (target) {
+        observer.unobserve(target)
+      }
+    }
+  }, [pdfDoc, pagesRendered])
 
   // Verify responsive resize rendering of canvases
   useEffect(() => {
     const handleResize = () => {
-      // Re-trigger PDF page renderings by refreshing doc ref slightly or just force refresh
       if (pdfDoc) {
         setPdfDoc(doc => doc)
       }
@@ -282,7 +311,7 @@ export default function TermsAcceptance() {
         <div 
           ref={viewerContainerRef}
           onScroll={handleScroll}
-          className="h-[500px] overflow-y-auto bg-black/60 border border-white/10 rounded-xl p-4 md:p-6 shadow-2xl relative"
+          className="h-[500px] overflow-y-auto bg-black/60 border border-white/10 rounded-xl p-4 md:p-6 shadow-2xl relative scroll-smooth"
         >
           {!pdfDoc ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-text-secondary bg-background/90">
@@ -290,9 +319,16 @@ export default function TermsAcceptance() {
               <span>Loading Document...</span>
             </div>
           ) : (
-            pagesRendered.map((pageNum) => (
-              <PdfPageCanvas key={pageNum} pageNumber={pageNum} pdfDocument={pdfDoc} />
-            ))
+            <div className="space-y-4">
+              {pagesRendered.map((pageNum) => (
+                <PdfPageCanvas key={pageNum} pageNumber={pageNum} pdfDocument={pdfDoc} />
+              ))}
+              
+              {/* Bottom Marker observed by IntersectionObserver */}
+              <div ref={bottomMarkerRef} className="h-8 w-full flex items-center justify-center text-text-muted text-[10px]">
+                --- End of Document ---
+              </div>
+            </div>
           )}
         </div>
 

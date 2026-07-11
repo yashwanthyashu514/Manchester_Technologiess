@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Users, 
@@ -28,6 +29,7 @@ import {
 import AnimatedSection from '../components/AnimatedSection'
 
 export default function AdminInternships() {
+  const navigate = useNavigate()
   const [token, setToken] = useState(localStorage.getItem('token'))
   const [isAdmin, setIsAdmin] = useState(false)
   

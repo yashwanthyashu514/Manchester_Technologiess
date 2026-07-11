@@ -239,7 +239,16 @@ export const initDb = async () => {
     { name: 'updated_at', type: 'TEXT' },
     { name: 'resume_data', type: 'TEXT' },
     { name: 'portfolio_data', type: 'TEXT' },
-    { name: 'docs_data', type: 'TEXT' }
+    { name: 'docs_data', type: 'TEXT' },
+    { name: 'termsAccepted', type: 'INTEGER DEFAULT 0' },
+    { name: 'signedAt', type: 'TEXT' },
+    { name: 'signatureImage', type: 'TEXT' },
+    { name: 'signedPdfGenerated', type: 'INTEGER DEFAULT 0' },
+    { name: 'signatureAuditLog', type: 'TEXT' },
+    { name: 'browserInfo', type: 'TEXT' },
+    { name: 'deviceInfo', type: 'TEXT' },
+    { name: 'ipAddress', type: 'TEXT' },
+    { name: 'signedPdfVersion', type: 'TEXT' }
   ];
 
 

@@ -16,6 +16,9 @@ import InternshipStatus from './pages/InternshipStatus'
 import AdminInternships from './pages/AdminInternships'
 import InternDashboard from './pages/InternDashboard'
 import VerifyCertificate from './pages/VerifyCertificate'
+import TermsAcceptance from './pages/TermsAcceptance'
+import DigitalSignature from './pages/DigitalSignature'
+import AdminViewSignedTc from './pages/AdminViewSignedTc'
 
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
@@ -131,6 +134,30 @@ function App() {
             element={
               <AnimatedPage>
                 <VerifyCertificate />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/terms-acceptance"
+            element={
+              <AnimatedPage>
+                <TermsAcceptance />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/digital-signature"
+            element={
+              <AnimatedPage>
+                <DigitalSignature />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/admin/view-signed-tc/:id"
+            element={
+              <AnimatedPage>
+                <AdminViewSignedTc />
               </AnimatedPage>
             }
           />

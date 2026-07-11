@@ -768,13 +768,14 @@ export default function AdminInternships() {
                     <th className="p-4">Applied Role</th>
                     <th className="p-4">Submission Date</th>
                     <th className="p-4">Resume</th>
+                    <th className="p-4">Signed T&C</th>
                     <th className="p-4">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {applications.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-text-muted">No applications found matching search filters.</td>
+                      <td colSpan={10} className="p-8 text-center text-text-muted">No applications found matching search filters.</td>
                     </tr>
                   ) : (
                     applications.map((app) => (
@@ -806,6 +807,15 @@ export default function AdminInternships() {
                           )}
                         </td>
                         <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${
+                            app.termsAccepted
+                              ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+                              : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+                          }`}>
+                            {app.termsAccepted ? 'Signed' : 'Pending'}
+                          </span>
+                        </td>
+                        <td className="p-4">
                           <span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${getStatusBadgeColor(app.status)}`}>
                             {app.status}
                           </span>
@@ -814,8 +824,7 @@ export default function AdminInternships() {
                     ))
                   )}
                 </tbody>
-              </table>
-            </div>
+              </table></div>
           </div>
 
           {/* CANDIDATE DETAIL PROFILE DRAWER (Span 6) */}
@@ -908,13 +917,21 @@ export default function AdminInternships() {
                         </a>
                       )}
 
+                      {selectedAppDetails.application.termsAccepted === 1 && (
+                        <button 
+                          onClick={() => navigate(`/admin/view-signed-tc/${selectedAppDetails.application.id}`)}
+                          className="bg-accent hover:bg-accent/80 text-background font-bold px-4 py-2 rounded text-xs flex items-center gap-1"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> View Signed T&C
+                        </button>
+                      )}
+
                       <button 
                         onClick={() => handleDeleteApplication(selectedAppDetails.application.id)}
                         className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Delete Application
-                      </button>
-                    </div>
+                      </button></div>
 
                     {/* Status Dropdown Manual Override */}
                     <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-3 text-xs">

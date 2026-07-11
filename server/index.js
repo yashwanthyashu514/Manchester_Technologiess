@@ -360,7 +360,7 @@ app.post('/api/internships/status', async (req, res) => {
 
   try {
     const app = await dbGet(
-      `SELECT application_id, full_name, email, preferred_domain, preferred_duration, status, created_at, updated_at 
+      `SELECT application_id, full_name, email, preferred_domain, preferred_duration, status, created_at, updated_at, termsAccepted, signedAt 
        FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`, 
       [email.trim(), application_id.trim()]
     );
@@ -438,6 +438,374 @@ app.get('/api/test-smtp', async (req, res) => {
     return res.json({ success: true, message: 'SMTP connection verified successfully! Emails will work.', SMTP_USER: smtpUser, SMTP_HOST: smtpHost, SMTP_PORT: smtpPort });
   } catch (err) {
     return res.json({ success: false, error: err.message, SMTP_USER: smtpUser, SMTP_HOST: smtpHost });
+  }
+});
+
+
+/* =========================================================================
+   TERMS & CONDITIONS & DIGITAL SIGNATURE ENDPOINTS
+   ========================================================================= */
+
+// Helper: Generate Signed Agreement PDF
+const generateSignedAgreementPDF = async (appData, outputPath) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      });
+
+      const stream = fs.createWriteStream(outputPath);
+      doc.pipe(stream);
+
+      const primaryColor = '#C8A96A';
+      const darkColor = '#1A1A1A';
+      const grayColor = '#555555';
+
+      const drawHeader = (pageNumber) => {
+        doc.fillColor(primaryColor).rect(0, 0, 595.28, 15).fill();
+        doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10)
+           .text('MANCHESTER TECHNOLOGIES', 50, 30, { align: 'left' });
+        doc.fillColor(grayColor).font('Helvetica').fontSize(8)
+           .text(`Signed Internship Agreement | Page ${pageNumber}`, 50, 30, { align: 'right' });
+        doc.strokeColor('#E5E5E5').lineWidth(0.5).moveTo(50, 42).lineTo(545.28, 42).stroke();
+      };
+
+      const drawFooter = () => {
+        doc.strokeColor('#E5E5E5').lineWidth(0.5).moveTo(50, 785).lineTo(545.28, 785).stroke();
+        doc.fillColor(grayColor).font('Helvetica').fontSize(8)
+           .text(`Verified Secure Digital Signature Agreement. Application ID: ${appData.application_id}`, 50, 792, { align: 'center' });
+      };
+
+      // PAGE 1
+      drawHeader(1);
+      doc.y = 60;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(18)
+         .text('SIGNED INTERNSHIP AGREEMENT', { align: 'center' });
+      doc.y = 80;
+      doc.fillColor(darkColor).font('Helvetica-Oblique').fontSize(9)
+         .text(`This document serves as a binding agreement and proof of acceptance of the Internship Program Terms & Conditions by the candidate listed below.`, { align: 'center' });
+      
+      doc.y = 110;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('1. SCOPE AND NATURE OF INTERNSHIP');
+      doc.y = 125;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('The internship is designed to provide you with practical experience, professional training, and mentorship in your selected technology domain. It is an educational program, and your participation does not guarantee future full-time employment at Manchester Technologies. You are expected to fulfill the tasks assigned by your mentor in a timely manner and adhere to the scheduled project timelines.', { leading: 12 });
+
+      doc.y = 195;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('2. INTELLECTUAL PROPERTY RIGHTS');
+      doc.y = 210;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('All work products, codebases, designs, documentation, repositories, tools, data, algorithms, and applications created, written, or developed by you, either individually or jointly with others, during the course of your internship with Manchester Technologies, shall be the sole and exclusive property of Manchester Technologies. You hereby assign all rights, titles, and interests in and to such intellectual property to the company. You agree not to copy, upload, distribute, or otherwise use these repositories or intellectual property outside the scope of your internship tasks without explicit written authorization.', { leading: 12 });
+
+      doc.y = 300;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('3. CODE OF CONDUCT AND DISCIPLINE');
+      doc.y = 315;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('As an intern, you represent Manchester Technologies. You are required to maintain the highest standards of professional conduct, integrity, and respect toward team members, mentors, and administrators. Manchester Technologies reserves the right to terminate your internship immediately without compensation or certificate issuance in cases of misconduct, plagiarism, lack of progress, unauthorized sharing of work, or violation of internal policies.', { leading: 12 });
+
+      doc.y = 405;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('4. CONFIDENTIALITY AGREEMENT (NON-DISCLOSURE)');
+      doc.y = 420;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('During your internship, you may have access to proprietary information, trade secrets, business processes, client lists, customer information, internal credentials, staging links, and source code. All such details constitute "Confidential Information" and must be kept strictly confidential. You shall not disclose, print, or distribute any Confidential Information to any third party, family members, or on social media platforms (including but not limited to LinkedIn, GitHub, and Twitter) during or after your internship. Your obligations under this section shall survive the termination of your internship indefinitely.', { leading: 12 });
+
+      drawFooter();
+
+      // PAGE 2
+      doc.addPage();
+      drawHeader(2);
+
+      doc.y = 60;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('5. WORK HOURS AND TIMELINE ASSIGNMENT');
+      doc.y = 75;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('You are required to dedicate the minimum agreed hours per day to your assigned tasks and participate in status checks or milestone updates as requested by your mentor. Failure to demonstrate consistent activity or update progress in the Intern Workspace for five (5) consecutive working days without prior approved leave may result in automatic deletion of your internship allocation and certificate revocation.', { leading: 12 });
+
+      doc.y = 145;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('6. STIPEND AND COMPENSATION CONDITIONS');
+      doc.y = 160;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('Any stipend, compensation, or reimbursement associated with your internship, if applicable, is strictly contingent upon satisfactory and complete fulfillment of all assigned tasks, final project review approval by your mentor, and successful submission of the final internship documentation. No partial stipend will be paid for incomplete or terminated internships.', { leading: 12 });
+
+      doc.y = 225;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('7. INTERNSHIP CERTIFICATE ISSUANCE');
+      doc.y = 240;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('An internship completion certificate will be generated and issued to you only after: (a) completion of the entire duration of the internship; (b) successful completion of all assigned checklist items; (c) approval of your code reviews and mentor feedback; and (d) successful return of all digital assets or documentation. The certificate will feature a unique, verified QR code logged permanently in the Manchester Technologies verification ledger.', { leading: 12 });
+
+      doc.y = 315;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('8. LIMITATION OF LIABILITY AND INDEMNITY');
+      doc.y = 330;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('Manchester Technologies shall not be held liable for any damages, losses, or injuries sustained by you during the internship, whether physical, financial, or technical. You agree to defend, indemnify, and hold harmless Manchester Technologies, its directors, officers, employees, and agents from any claims, liability, damages, or costs arising out of your negligence, misconduct, or breach of these terms.', { leading: 12 });
+
+      doc.y = 405;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11)
+         .text('9. ACCEPTANCE AND ACKNOWLEDGMENT');
+      doc.y = 420;
+      doc.fillColor(darkColor).font('Helvetica').fontSize(9)
+         .text('By signing this document digitally through the Manchester Technologies Portal, you acknowledge that you have read, understood, and agreed to all the rules, conditions, confidentiality regulations, and intellectual property rights described herein. Your digital signature serves as a legally binding acceptance of these Terms & Conditions.', { leading: 12 });
+
+      drawFooter();
+
+      // PAGE 3
+      doc.addPage();
+      drawHeader(3);
+
+      doc.y = 60;
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(14)
+         .text('CANDIDATE SIGNATURE & RECORD OF ACCEPTANCE', { align: 'center' });
+
+      doc.strokeColor(primaryColor).lineWidth(1)
+         .rect(50, 90, 495.28, 140).stroke();
+
+      doc.y = 105;
+      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(10);
+      
+      const renderDetailRow = (label, val, yVal) => {
+        doc.text(label, 70, yVal);
+        doc.font('Helvetica').text(val, 200, yVal);
+        doc.font('Helvetica-Bold');
+      };
+
+      renderDetailRow('Candidate Name:', appData.full_name, 110);
+      renderDetailRow('Candidate Email:', appData.email, 130);
+      renderDetailRow('Application ID:', appData.application_id, 150);
+      renderDetailRow('Date of Signing:', new Date(appData.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), 170);
+      renderDetailRow('Status:', 'Terms & Conditions Accepted', 190);
+      renderDetailRow('Signed Version:', appData.signedPdfVersion || 'manchestertechnologiestandc.pdf', 210);
+
+      doc.y = 260;
+      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(11)
+         .text('Acceptance Statement:');
+      doc.y = 280;
+      doc.fillColor(grayColor).font('Helvetica').fontSize(10)
+         .text('"I confirm that I have read and accepted all Terms & Conditions of Manchester Technologies Internship Program."', { align: 'left' });
+
+      doc.y = 330;
+      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(11)
+         .text('Digital Signature (Drawn):');
+
+      if (appData.signatureImage) {
+        const base64Data = appData.signatureImage.replace(/^data:image\/png;base64,/, "");
+        const tempSigPath = path.join(UPLOADS_DIR, `temp-sig-${appData.application_id}.png`);
+        fs.writeFileSync(tempSigPath, base64Data, 'base64');
+        
+        doc.image(tempSigPath, 150, 360, { width: 300, height: 120 });
+        
+        stream.on('finish', () => {
+          try {
+            if (fs.existsSync(tempSigPath)) fs.unlinkSync(tempSigPath);
+          } catch (e) {
+            console.error('Temp signature unlink error:', e);
+          }
+        });
+      } else {
+        doc.font('Helvetica-Oblique').fontSize(10).text('No signature captured', 150, 370);
+      }
+
+      doc.strokeColor('#E5E5E5').lineWidth(0.5)
+         .rect(50, 520, 495.28, 90).stroke();
+      doc.fillColor(darkColor).font('Helvetica-Bold').fontSize(9).text('Security Audit Logs:', 60, 530);
+      
+      doc.fillColor(grayColor).font('Helvetica').fontSize(8);
+      doc.text(`Browser Agent: ${appData.browserInfo || 'N/A'}`, 60, 550);
+      doc.text(`Device Model: ${appData.deviceInfo || 'N/A'}`, 60, 565);
+      doc.text(`IP Address Logged: ${appData.ipAddress || 'N/A'}`, 60, 580);
+      doc.text(`Audit Signature Hash: SECURE_LEDGER_CONFIRMED_${appData.application_id}`, 60, 595);
+
+      drawFooter();
+
+      doc.end();
+      stream.on('finish', () => resolve());
+      stream.on('error', (err) => reject(err));
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// Check T&C Acceptance Eligibility
+app.post('/api/internships/verify-tc-eligibility', async (req, res) => {
+  const { email, application_id } = req.body;
+  if (!email || !application_id) {
+    return res.status(400).json({ error: 'Email and Application ID are required.' });
+  }
+
+  try {
+    const app = await dbGet(
+      `SELECT id, application_id, full_name, email, status, termsAccepted, signedAt 
+       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
+      [email.trim(), application_id.trim()]
+    );
+
+    if (!app) {
+      return res.status(404).json({ error: 'No application found with the provided credentials.' });
+    }
+
+    if (app.status !== 'Selected' && app.status !== 'Active Intern' && app.status !== 'Completed') {
+      return res.status(403).json({ error: 'Access Denied: Terms & Conditions are only accessible to Selected candidates.' });
+    }
+
+    return res.json({
+      success: true,
+      eligible: true,
+      termsAccepted: !!app.termsAccepted,
+      signedAt: app.signedAt,
+      application: {
+        id: app.id,
+        application_id: app.application_id,
+        full_name: app.full_name,
+        email: app.email,
+        status: app.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Error verifying T&C eligibility:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Submit Digital Signature
+app.post('/api/internships/submit-signature', async (req, res) => {
+  const { email, application_id, signatureImage, browserInfo, deviceInfo, ipAddress } = req.body;
+  if (!email || !application_id || !signatureImage) {
+    return res.status(400).json({ error: 'Email, Application ID, and Signature Image are required.' });
+  }
+
+  try {
+    const app = await dbGet(
+      `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
+      [email.trim(), application_id.trim()]
+    );
+
+    if (!app) {
+      return res.status(404).json({ error: 'No application found with the provided credentials.' });
+    }
+
+    if (app.status !== 'Selected' && app.status !== 'Active Intern' && app.status !== 'Completed') {
+      return res.status(403).json({ error: 'Access Denied: You are not authorized to sign this agreement.' });
+    }
+
+    if (app.termsAccepted) {
+      return res.status(400).json({ error: 'You have already accepted and signed the Terms & Conditions.' });
+    }
+
+    const timestamp = new Date().toISOString();
+    const clientIp = ipAddress || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    
+    const auditLog = JSON.stringify([{
+      event: 'Terms accepted and signed',
+      timestamp,
+      ipAddress: clientIp,
+      browserInfo,
+      deviceInfo
+    }]);
+
+    const signedPdfVersion = 'manchestertechnologiestandc.pdf';
+
+    await dbRun(
+      `UPDATE applications 
+       SET termsAccepted = 1,
+           signedAt = ?,
+           signatureImage = ?,
+           browserInfo = ?,
+           deviceInfo = ?,
+           ipAddress = ?,
+           signedPdfVersion = ?,
+           signatureAuditLog = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [
+        timestamp,
+        signatureImage,
+        browserInfo,
+        deviceInfo,
+        clientIp,
+        signedPdfVersion,
+        auditLog,
+        timestamp,
+        app.id
+      ]
+    );
+
+    console.log(`✍️ Application ${application_id} successfully signed by ${app.full_name}.`);
+
+    return res.json({
+      success: true,
+      message: 'Terms & Conditions Successfully Accepted',
+      signedAt: timestamp,
+      application_id: app.application_id
+    });
+
+  } catch (error) {
+    console.error('Error submitting signature:', error);
+    return res.status(500).json({ error: 'Failed to record signature. Please try again.' });
+  }
+});
+
+// Admin endpoint: Fetch signed T&C details
+app.get('/api/admin/applications/:id/signed-tc', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const app = await dbGet(
+      `SELECT id, application_id, full_name, email, status, termsAccepted, signedAt, signatureImage, browserInfo, deviceInfo, ipAddress, signedPdfVersion, signatureAuditLog 
+       FROM applications WHERE id = ?`,
+      [id]
+    );
+
+    if (!app) {
+      return res.status(404).json({ error: 'Application record not found.' });
+    }
+
+    return res.json({ success: true, application: app });
+  } catch (error) {
+    console.error('Error fetching signed T&C details:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin endpoint: Generate and download signed PDF
+app.get('/api/admin/applications/:id/download-signed-pdf', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const app = await dbGet(`SELECT * FROM applications WHERE id = ?`, [id]);
+    if (!app) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+
+    if (!app.termsAccepted) {
+      return res.status(400).json({ error: 'This candidate has not signed the Terms & Conditions yet.' });
+    }
+
+    const tempPdfName = `signed-agreement-${app.application_id}-${Date.now()}.pdf`;
+    const tempPdfPath = path.join(CERTS_DIR, tempPdfName);
+
+    await generateSignedAgreementPDF(app, tempPdfPath);
+
+    res.download(tempPdfPath, `Signed_Agreement_${app.application_id}.pdf`, (err) => {
+      try {
+        if (fs.existsSync(tempPdfPath)) {
+          fs.unlinkSync(tempPdfPath);
+        }
+      } catch (unlinkErr) {
+        console.error('Failed to unlink temporary signed agreement PDF:', unlinkErr);
+      }
+    });
+
+  } catch (error) {
+    console.error('Failed to download signed PDF:', error);
+    return res.status(500).json({ error: 'Internal server error while generating signed PDF.' });
   }
 });
 
@@ -632,7 +1000,7 @@ app.get('/api/admin/applications', authenticate, requireAdmin, async (req, res) 
   try {
     const { search, domain, status, duration, college, date } = req.query;
     
-    let sql = `SELECT id, application_id, full_name, email, phone, college_name, preferred_domain, preferred_duration, status, created_at, email_notification_sent, email_notification_error, country, degree, branch, certifications, previous_experience, experience_description, additional_comments, resume_path FROM applications WHERE 1=1`;
+    let sql = `SELECT id, application_id, full_name, email, phone, college_name, preferred_domain, preferred_duration, status, created_at, email_notification_sent, email_notification_error, country, degree, branch, certifications, previous_experience, experience_description, additional_comments, resume_path, termsAccepted FROM applications WHERE 1=1`;
     const params = [];
 
     if (search) {

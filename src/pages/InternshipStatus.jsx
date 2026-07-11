@@ -516,7 +516,6 @@ export default function InternshipStatus() {
                   )}
                 </motion.div>
               )}
-
               {/* === SELECTED / ACTIVE INTERN CARD === */}
               {['Selected', 'Active Intern'].includes(data.application.status) && (
                 <motion.div
@@ -526,30 +525,78 @@ export default function InternshipStatus() {
                 >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-accent/10 rounded-full blur-2xl" />
 
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
-                      <UserCheck className="w-6 h-6 text-accent" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-bold text-accent text-lg">Internship Access Granted!</h3>
-                      <p className="text-xs text-text-secondary mt-1">
-                        Congratulations! You have been selected. Click below to access your personal intern workspace with project tasks and mentor feedback.
-                      </p>
-                    </div>
-                  </div>
+                  {data.application.status === 'Selected' && !data.application.termsAccepted ? (
+                    <div className="space-y-6">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+                          <UserCheck className="w-6 h-6 text-accent" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading font-bold text-accent text-lg">Internship Selection Approved!</h3>
+                          <p className="text-xs text-text-secondary mt-1">
+                            Congratulations! You have been selected as an intern. To activate your workspace and complete your onboarding, you must review and digitally sign the internship Terms & Conditions agreement.
+                          </p>
+                        </div>
+                      </div>
 
-                  <button
-                    onClick={handleInternLogin}
-                    disabled={isLoggingIn}
-                    id="access-intern-dashboard-btn"
-                    className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
-                  >
-                    {isLoggingIn ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Starting Dashboard...</>
-                    ) : (
-                      <> Access Intern Dashboard <ArrowRight className="w-4 h-4" /></>
-                    )}
-                  </button>
+                      <button
+                        onClick={() => navigate(`/internships/terms-acceptance?appId=${data.application.application_id}&email=${data.application.email}`)}
+                        id="proceed-to-tc-btn"
+                        className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
+                      >
+                        Proceed to Terms & Conditions <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {data.application.termsAccepted && (
+                        <div className="bg-emerald-950/20 border border-emerald-500/20 p-4 rounded-xl space-y-2">
+                          <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Terms & Conditions Signed</span>
+                          </div>
+                          <p className="text-xs text-text-secondary">
+                            You have already accepted and signed the Terms & Conditions.
+                          </p>
+                          <div className="grid grid-cols-2 gap-4 pt-1 text-[10px] text-text-muted">
+                            <div>
+                              <span className="block font-semibold">Signed Date</span>
+                              <span className="text-white font-mono">{new Date(data.application.signedAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                            </div>
+                            <div>
+                              <span className="block font-semibold">Signed Time</span>
+                              <span className="text-white font-mono">{new Date(data.application.signedAt).toLocaleTimeString('en-IN')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+                          <UserCheck className="w-6 h-6 text-accent" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading font-bold text-accent text-lg">Internship Access Granted!</h3>
+                          <p className="text-xs text-text-secondary mt-1">
+                            Your agreement is complete. Click below to access your personal intern workspace with project tasks, repository links, and mentor feedback.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleInternLogin}
+                        disabled={isLoggingIn}
+                        id="access-intern-dashboard-btn"
+                        className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
+                      >
+                        {isLoggingIn ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Starting Dashboard...</>
+                        ) : (
+                          <> Access Intern Dashboard <ArrowRight className="w-4 h-4" /></>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
 

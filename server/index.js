@@ -1096,7 +1096,7 @@ app.get('/api/admin/applications/:id', authenticate, requireAdmin, async (req, r
 
     return res.json({
       success: true,
-      application: app,
+      application: normalizeAppKeys(app),
       interview,
       project: project ? { ...project, tasks: parsedTasks } : null,
       certificate

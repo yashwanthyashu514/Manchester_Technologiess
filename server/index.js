@@ -447,6 +447,29 @@ app.get('/api/test-smtp', async (req, res) => {
    TERMS & CONDITIONS & DIGITAL SIGNATURE ENDPOINTS
    ========================================================================= */
 
+// Normalizer to map lowercase keys (PostgreSQL default) to camelCase keys (SQLite / Frontend default)
+const normalizeAppKeys = (app) => {
+  if (!app) return app;
+  const normalized = { ...app };
+  const keyMappings = {
+    termsaccepted: 'termsAccepted',
+    signedat: 'signedAt',
+    signatureimage: 'signatureImage',
+    signedpdfgenerated: 'signedPdfGenerated',
+    signatureauditlog: 'signatureAuditLog',
+    browserinfo: 'browserInfo',
+    deviceinfo: 'deviceInfo',
+    ipaddress: 'ipAddress',
+    signedpdfversion: 'signedPdfVersion'
+  };
+  for (const [pgKey, camelKey] of Object.entries(keyMappings)) {
+    if (app[pgKey] !== undefined && app[camelKey] === undefined) {
+      normalized[camelKey] = app[pgKey];
+    }
+  }
+  return normalized;
+};
+
 // Helper: Generate Signed Agreement PDF
 // Helper: Generate Signed Agreement PDF using pdf-lib (strictly dynamic)
 const generateSignedAgreementPDF = async (appData, outputPath) => {
@@ -649,21 +672,23 @@ app.post('/api/internships/verify-tc-eligibility', async (req, res) => {
       return res.status(404).json({ error: 'No application found with the provided credentials.' });
     }
 
-    if (app.status !== 'Selected' && app.status !== 'Active Intern' && app.status !== 'Completed') {
+    const normalized = normalizeAppKeys(app);
+
+    if (normalized.status !== 'Selected' && normalized.status !== 'Active Intern' && normalized.status !== 'Completed') {
       return res.status(403).json({ error: 'Access Denied: Terms & Conditions are only accessible to Selected candidates.' });
     }
 
     return res.json({
       success: true,
       eligible: true,
-      termsAccepted: !!app.termsAccepted,
-      signedAt: app.signedAt,
+      termsAccepted: !!normalized.termsAccepted,
+      signedAt: normalized.signedAt,
       application: {
-        id: app.id,
-        application_id: app.application_id,
-        full_name: app.full_name,
-        email: app.email,
-        status: app.status
+        id: normalized.id,
+        application_id: normalized.application_id,
+        full_name: normalized.full_name,
+        email: normalized.email,
+        status: normalized.status
       }
     });
 
@@ -690,11 +715,13 @@ app.post('/api/internships/submit-signature', async (req, res) => {
       return res.status(404).json({ error: 'No application found with the provided credentials.' });
     }
 
-    if (app.status !== 'Selected' && app.status !== 'Active Intern' && app.status !== 'Completed') {
+    const normalized = normalizeAppKeys(app);
+
+    if (normalized.status !== 'Selected' && normalized.status !== 'Active Intern' && normalized.status !== 'Completed') {
       return res.status(403).json({ error: 'Access Denied: You are not authorized to sign this agreement.' });
     }
 
-    if (app.termsAccepted) {
+    if (normalized.termsAccepted) {
       return res.status(400).json({ error: 'You have already accepted and signed the Terms & Conditions.' });
     }
 
@@ -732,17 +759,17 @@ app.post('/api/internships/submit-signature', async (req, res) => {
         signedPdfVersion,
         auditLog,
         timestamp,
-        app.id
+        normalized.id
       ]
     );
 
-    console.log(`✍️ Application ${application_id} successfully signed by ${app.full_name}.`);
+    console.log(`✍️ Application ${application_id} successfully signed by ${normalized.full_name}.`);
 
     return res.json({
       success: true,
       message: 'Terms & Conditions Successfully Accepted',
       signedAt: timestamp,
-      application_id: app.application_id
+      application_id: normalized.application_id
     });
 
   } catch (error) {
@@ -765,7 +792,7 @@ app.get('/api/admin/applications/:id/signed-tc', authenticate, requireAdmin, asy
       return res.status(404).json({ error: 'Application record not found.' });
     }
 
-    return res.json({ success: true, application: app });
+    return res.json({ success: true, application: normalizeAppKeys(app) });
   } catch (error) {
     console.error('Error fetching signed T&C details:', error);
     return res.status(500).json({ error: 'Internal server error.' });
@@ -781,14 +808,16 @@ app.get('/api/admin/applications/:id/download-signed-pdf', authenticate, require
       return res.status(404).json({ error: 'Application not found.' });
     }
 
-    if (!app.termsAccepted) {
+    const normalized = normalizeAppKeys(app);
+
+    if (!normalized.termsAccepted) {
       return res.status(400).json({ error: 'This candidate has not signed the Terms & Conditions yet.' });
     }
 
-    const tempPdfName = `signed-agreement-${app.application_id}-${Date.now()}.pdf`;
+    const tempPdfName = `signed-agreement-${normalized.application_id}-${Date.now()}.pdf`;
     const tempPdfPath = path.join(CERTS_DIR, tempPdfName);
 
-    await generateSignedAgreementPDF(app, tempPdfPath);
+    await generateSignedAgreementPDF(normalized, tempPdfPath);
 
     res.download(tempPdfPath, `Signed_Agreement_${app.application_id}.pdf`, (err) => {
       try {
@@ -1034,7 +1063,8 @@ app.get('/api/admin/applications', authenticate, requireAdmin, async (req, res) 
     sql += ` ORDER BY created_at DESC`;
 
     const apps = await dbQuery(sql, params);
-    return res.json({ success: true, applications: apps });
+    const normalizedApps = apps.map(normalizeAppKeys);
+    return res.json({ success: true, applications: normalizedApps });
   } catch (error) {
     console.error('Fetch applications failed:', error);
     return res.status(500).json({ error: 'Failed to fetch applications.' });

@@ -476,10 +476,35 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
   }
 
   try {
-    const record = await dbGet(
+    let record = await dbGet(
       `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND (application_id = ? OR tracking_id = ?)`,
       [email.trim(), targetId, targetId]
     );
+
+    let isFallback = false;
+    let appRecord = null;
+
+    if (!record) {
+      // Fallback: Check the main applications table
+      appRecord = await dbGet(
+        `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
+        [email.trim(), targetId]
+      );
+      if (appRecord) {
+        const normalized = normalizeAppKeys(appRecord);
+        record = {
+          id: normalized.id,
+          application_id: normalized.application_id,
+          email: normalized.email,
+          candidate_name: normalized.full_name,
+          domain: normalized.preferred_domain,
+          status: normalized.status || 'Submitted',
+          created_at: normalized.created_at,
+          updated_at: normalized.updated_at
+        };
+        isFallback = true;
+      }
+    }
 
     if (!record) {
       return res.status(404).json({ error: 'No record found. Please verify your Gmail and Application ID.' });
@@ -490,10 +515,12 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
     let signedAt = null;
     let certificateId = null;
     if (record.status === 'Selected') {
-      const appRecord = await dbGet(
-        `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-        [email.trim(), targetId]
-      );
+      if (!appRecord) {
+        appRecord = await dbGet(
+          `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
+          [email.trim(), targetId]
+        );
+      }
       const normalized = normalizeAppKeys(appRecord || {});
       termsAccepted = !!normalized.termsAccepted;
       signedAt = normalized.signedAt;

@@ -565,10 +565,30 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
 app.get('/api/internships/verify-signature/:certId', rateLimit(15, 60000), async (req, res) => {
   const { certId } = req.params;
   try {
-    const sig = await dbGet(
+    let sig = await dbGet(
       `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
       [certId.toUpperCase(), certId.toUpperCase()]
     );
+    if (!sig) {
+      // Fallback: Check if they signed in the main applications table
+      const app = await dbGet(
+        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id = ? AND (termsAccepted = 1 OR termsaccepted = 1)`,
+        [certId.toUpperCase()]
+      );
+      if (app) {
+        const normalized = normalizeAppKeys(app);
+        sig = {
+          certificate_id: normalized.application_id,
+          application_id: normalized.application_id,
+          email: normalized.email,
+          candidate_name: normalized.full_name,
+          domain: normalized.preferred_domain,
+          signed_at: normalized.signedAt,
+          created_at: normalized.signedAt
+        };
+      }
+    }
+
     if (!sig) {
       return res.status(404).json({ valid: false, error: 'Invalid ID. No matching signature record found.' });
     }
@@ -595,10 +615,30 @@ app.post('/api/internships/verify-signature', rateLimit(15, 60000), async (req, 
   const { cert_id } = req.body;
   if (!cert_id) return res.status(400).json({ error: 'Application ID or Certificate ID is required.' });
   try {
-    const sig = await dbGet(
+    let sig = await dbGet(
       `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
       [cert_id.toUpperCase(), cert_id.toUpperCase()]
     );
+    if (!sig) {
+      // Fallback: Check if they signed in the main applications table
+      const app = await dbGet(
+        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id = ? AND (termsAccepted = 1 OR termsaccepted = 1)`,
+        [cert_id.toUpperCase()]
+      );
+      if (app) {
+        const normalized = normalizeAppKeys(app);
+        sig = {
+          certificate_id: normalized.application_id,
+          application_id: normalized.application_id,
+          email: normalized.email,
+          candidate_name: normalized.full_name,
+          domain: normalized.preferred_domain,
+          signed_at: normalized.signedAt,
+          created_at: normalized.signedAt
+        };
+      }
+    }
+
     if (!sig) {
       return res.status(404).json({ valid: false, error: 'Invalid ID. No matching signature record found.' });
     }

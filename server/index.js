@@ -28,6 +28,8 @@ import {
   authenticate,
   requireAdmin,
   requireInternOrAdmin,
+  requireMentor,
+  requireMentorOrAdmin,
   generateToken
 } from './auth.js';
 
@@ -938,6 +940,13 @@ app.post('/api/internships/submit-signature', async (req, res) => {
 
     console.log(`✍️ Application ${application_id} signed by ${normalized.full_name}. Certificate ID: ${certId}`);
 
+    // Trigger auto-assignment of mentor based on domain and workloads
+    try {
+      await autoAssignMentor(normalized.application_id);
+    } catch (assignErr) {
+      console.warn('⚠️ Auto-assignment failed:', assignErr.message);
+    }
+
     // Send signature confirmation email (non-blocking)
     try {
       await sendSignatureConfirmation(normalized.full_name, normalized.email, normalized.application_id, certId, timestamp);
@@ -1816,6 +1825,1288 @@ app.get('/api/admin/digital-signatures/:appId/download-pdf', authenticate, requi
   } catch (error) {
     console.error('Admin digital signature download error:', error);
     return res.status(500).json({ error: 'Failed to generate signed PDF.' });
+  }
+});
+
+
+/* =========================================================================
+   MENTOR MANAGEMENT & MENTOR SYSTEM ENDPOINTS
+   ========================================================================= */
+
+// Smart workload-balanced automatic mentor assignment
+const autoAssignMentor = async (applicationId) => {
+  try {
+    const app = await dbGet(`SELECT application_id, preferred_domain, full_name, email FROM applications WHERE application_id = ?`, [applicationId]);
+    if (!app) return;
+    
+    // 1. Fetch all active mentors
+    const mentors = await dbQuery(`SELECT * FROM mentors WHERE status = 'Active'`);
+    if (!mentors || mentors.length === 0) {
+      console.warn('⚠️ No active mentors available for auto-assignment.');
+      return;
+    }
+    
+    // 2. Filter mentors matching preferred domain if any exist
+    let domainMentors = mentors.filter(m => {
+      const mDom = (m.domain || '').toLowerCase().trim();
+      const aDom = (app.preferred_domain || '').toLowerCase().trim();
+      return mDom.includes(aDom) || aDom.includes(mDom);
+    });
+    
+    // Fallback to all active mentors if none match preferred domain
+    const candidateMentors = domainMentors.length > 0 ? domainMentors : mentors;
+    
+    // 3. For each candidate mentor, query workload count (Selected or Active Intern status)
+    const mentorWorkloads = [];
+    for (const mentor of candidateMentors) {
+      const row = await dbGet(
+        `SELECT COUNT(*) as count FROM applications WHERE mentor_id = ? AND status IN ('Selected', 'Active Intern')`,
+        [mentor.id]
+      );
+      mentorWorkloads.push({
+        mentor,
+        count: row ? row.count : 0
+      });
+    }
+    
+    // Sort mentors by workload count ascending
+    mentorWorkloads.sort((a, b) => a.count - b.count);
+    const chosen = mentorWorkloads[0].mentor;
+    
+    // 4. Update application with assigned mentor details
+    await dbRun(
+      `UPDATE applications SET mentor_id = ?, mentor_name = ?, updated_at = ? WHERE application_id = ?`,
+      [chosen.id, chosen.full_name, new Date().toISOString(), applicationId]
+    );
+    
+    // 5. Log activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ['system', 'system', 'Auto-assigned Mentor', `Assigned mentor ${chosen.full_name} to intern ${app.full_name} (${applicationId})`, '127.0.0.1', new Date().toISOString()]
+    );
+    
+    // 6. Push notifications
+    // Notification for Intern
+    await dbRun(
+      `INSERT INTO notifications (application_id, role, title, message, type, created_at)
+       VALUES (?, 'intern', 'Mentor Assigned', 'Mentor ${chosen.full_name} has been assigned to guide your internship domain.', 'feedback', ?)`,
+      [applicationId, new Date().toISOString()]
+    );
+    // Notification for Mentor
+    await dbRun(
+      `INSERT INTO notifications (mentor_id, role, title, message, type, created_at)
+       VALUES (?, 'mentor', 'New Intern Assigned', 'Intern ${app.full_name} (${applicationId}) has been assigned to your supervision.', 'assignment', ?)`,
+      [chosen.id, new Date().toISOString()]
+    );
+    
+    console.log(`🤖 Smart Auto-Assignment: Assigned ${chosen.full_name} to ${app.full_name} (${applicationId}) [Workload: ${mentorWorkloads[0].count}]`);
+  } catch (err) {
+    console.error('❌ Error in auto-assigning mentor:', err);
+  }
+};
+
+// Mentor Authentication Login
+app.post('/api/auth/mentor-login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  try {
+    const mentor = await dbGet(`SELECT * FROM mentors WHERE LOWER(email) = LOWER(?)`, [email.trim()]);
+    if (!mentor) {
+      return res.status(401).json({ error: 'Invalid Email or Password.' });
+    }
+
+    if (mentor.status !== 'Active') {
+      return res.status(403).json({ error: 'Access Denied: Your mentor account is currently disabled.' });
+    }
+
+    const isValid = bcrypt.compareSync(password, mentor.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid Email or Password.' });
+    }
+
+    const token = generateToken({
+      id: mentor.id,
+      email: mentor.email,
+      full_name: mentor.full_name,
+      role: 'mentor'
+    });
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [mentor.email, 'mentor', 'Mentor Login', 'Mentor successfully logged in', req.ip || '', new Date().toISOString()]
+    );
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: mentor.id,
+        email: mentor.email,
+        full_name: mentor.full_name,
+        role: 'mentor',
+        domain: mentor.domain
+      }
+    });
+
+  } catch (err) {
+    console.error('Mentor login error:', err);
+    return res.status(500).json({ error: 'Internal login error.' });
+  }
+});
+
+// Mentor Change Password
+app.post('/api/mentor/change-password', authenticate, requireMentor, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required.' });
+  }
+
+  try {
+    const mentor = await dbGet(`SELECT * FROM mentors WHERE id = ?`, [req.user.id]);
+    if (!mentor) {
+      return res.status(404).json({ error: 'Mentor not found.' });
+    }
+
+    const isValid = bcrypt.compareSync(currentPassword, mentor.password_hash);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Incorrect current password.' });
+    }
+
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    await dbRun(`UPDATE mentors SET password_hash = ?, updated_at = ? WHERE id = ?`, [newHash, new Date().toISOString(), req.user.id]);
+
+    // Log activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [mentor.email, 'mentor', 'Password Reset / Change', 'Mentor changed password', req.ip || '', new Date().toISOString()]
+    );
+
+    return res.json({ success: true, message: 'Password updated successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Mentor Management - Retrieve Mentors list with workload counts
+app.get('/api/admin/mentors', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const mentors = await dbQuery(`SELECT id, email, full_name, domain, status, created_at, updated_at FROM mentors`);
+    const results = [];
+    
+    for (const m of mentors) {
+      const assigned = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE mentor_id = ?`, [m.id]);
+      const active = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE mentor_id = ? AND status IN ('Selected', 'Active Intern')`, [m.id]);
+      const completed = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE mentor_id = ? AND status = 'Completed'`, [m.id]);
+      
+      results.push({
+        ...m,
+        assigned_count: assigned ? assigned.count : 0,
+        active_count: active ? active.count : 0,
+        completed_count: completed ? completed.count : 0
+      });
+    }
+
+    return res.json({ success: true, mentors: results });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Mentor Management - Create Mentor
+app.post('/api/admin/mentors', authenticate, requireAdmin, async (req, res) => {
+  const { email, password, full_name, domain } = req.body;
+  if (!email || !password || !full_name) {
+    return res.status(400).json({ error: 'Email, password, and full name are required.' });
+  }
+
+  try {
+    const exists = await dbGet(`SELECT id FROM mentors WHERE LOWER(email) = LOWER(?)`, [email.trim()]);
+    if (exists) {
+      return res.status(400).json({ error: 'A mentor with this email already exists.' });
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    const time = new Date().toISOString();
+    await dbRun(
+      `INSERT INTO mentors (email, password_hash, full_name, domain, status, created_at)
+       VALUES (?, ?, ?, ?, 'Active', ?)`,
+      [email.trim(), hash, full_name.trim(), domain || '', time]
+    );
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'admin', 'Create Mentor', ?, ?, ?)`,
+      [req.user.email, `Created mentor ${full_name} (${email})`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: 'Mentor profile created successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Mentor Management - Update Mentor status/domain
+app.put('/api/admin/mentors/:id', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { full_name, domain, status } = req.body;
+
+  try {
+    const m = await dbGet(`SELECT * FROM mentors WHERE id = ?`, [id]);
+    if (!m) return res.status(404).json({ error: 'Mentor not found.' });
+
+    const time = new Date().toISOString();
+    await dbRun(
+      `UPDATE mentors SET full_name = ?, domain = ?, status = ?, updated_at = ? WHERE id = ?`,
+      [full_name.trim(), domain.trim(), status, time, id]
+    );
+
+    // Update mentor name in applications
+    await dbRun(`UPDATE applications SET mentor_name = ? WHERE mentor_id = ?`, [full_name.trim(), id]);
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'admin', 'Update Mentor', ?, ?, ?)`,
+      [req.user.email, `Updated mentor id ${id} metadata`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: 'Mentor profile updated successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Mentor Management - Reset Password
+app.post('/api/admin/mentors/reset-password', authenticate, requireAdmin, async (req, res) => {
+  const { mentor_id, password } = req.body;
+  if (!mentor_id || !password) {
+    return res.status(400).json({ error: 'Mentor ID and new password are required.' });
+  }
+
+  try {
+    const m = await dbGet(`SELECT * FROM mentors WHERE id = ?`, [mentor_id]);
+    if (!m) return res.status(404).json({ error: 'Mentor not found.' });
+
+    const hash = bcrypt.hashSync(password, 10);
+    await dbRun(`UPDATE mentors SET password_hash = ?, updated_at = ? WHERE id = ?`, [hash, new Date().toISOString(), mentor_id]);
+
+    // Log Reset Log
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'admin', 'Reset Mentor Password', ?, ?, ?)`,
+      [req.user.email, `Reset password for mentor ${m.email}`, req.ip || '', new Date().toISOString()]
+    );
+
+    return res.json({ success: true, message: `Password reset successfully for ${m.full_name}.` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Intern Assignment - Manual Assignment
+app.post('/api/admin/assign-mentor/manual', authenticate, requireAdmin, async (req, res) => {
+  const { application_id, mentor_id } = req.body;
+  if (!application_id || !mentor_id) {
+    return res.status(400).json({ error: 'Application ID and Mentor ID are required.' });
+  }
+
+  try {
+    const app = await dbGet(`SELECT id, full_name, email FROM applications WHERE application_id = ?`, [application_id]);
+    if (!app) return res.status(404).json({ error: 'Intern application record not found.' });
+
+    const mentor = await dbGet(`SELECT id, full_name, email FROM mentors WHERE id = ?`, [mentor_id]);
+    if (!mentor) return res.status(404).json({ error: 'Mentor not found.' });
+
+    const time = new Date().toISOString();
+    await dbRun(
+      `UPDATE applications SET mentor_id = ?, mentor_name = ?, updated_at = ? WHERE application_id = ?`,
+      [mentor.id, mentor.full_name, time, application_id]
+    );
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'admin', 'Manual Assign Mentor', ?, ?, ?)`,
+      [req.user.email, `Assigned mentor ${mentor.full_name} to intern ${app.full_name} (${application_id})`, req.ip || '', time]
+    );
+
+    // Notify Intern & Mentor
+    await dbRun(
+      `INSERT INTO notifications (application_id, role, title, message, type, created_at)
+       VALUES (?, 'intern', 'Mentor Assigned', 'Mentor ${mentor.full_name} has been manually assigned to guide you.', 'feedback', ?)`,
+      [application_id, time]
+    );
+    await dbRun(
+      `INSERT INTO notifications (mentor_id, role, title, message, type, created_at)
+       VALUES (?, 'mentor', 'New Intern Assigned', 'Intern ${app.full_name} (${application_id}) was assigned to you.', 'assignment', ?)`,
+      [mentor.id, time]
+    );
+
+    return res.json({ success: true, message: `Intern successfully assigned to ${mentor.full_name}.` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Intern Assignment - Bulk Assignment (Workload Balanced Distribution)
+app.post('/api/admin/assign-mentor/bulk', authenticate, requireAdmin, async (req, res) => {
+  const { application_ids, mentor_ids } = req.body;
+  if (!application_ids || !Array.isArray(application_ids) || application_ids.length === 0) {
+    return res.status(400).json({ error: 'A valid array of application IDs is required.' });
+  }
+  if (!mentor_ids || !Array.isArray(mentor_ids) || mentor_ids.length === 0) {
+    return res.status(400).json({ error: 'A valid array of mentor IDs is required.' });
+  }
+
+  try {
+    // 1. Fetch selected mentors
+    const mentors = [];
+    for (const mId of mentor_ids) {
+      const m = await dbGet(`SELECT id, full_name FROM mentors WHERE id = ? AND status = 'Active'`, [mId]);
+      if (m) mentors.push(m);
+    }
+
+    if (mentors.length === 0) {
+      return res.status(400).json({ error: 'No active mentors found for the selected IDs.' });
+    }
+
+    // 2. Fetch initial workloads for each mentor to do true load balancing
+    const mentorWorkloads = [];
+    for (const m of mentors) {
+      const row = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE mentor_id = ? AND status IN ('Selected', 'Active Intern')`, [m.id]);
+      mentorWorkloads.push({
+        mentor: m,
+        count: row ? row.count : 0
+      });
+    }
+
+    const time = new Date().toISOString();
+    const assignedLog = [];
+
+    // 3. Process each intern application in bulk, assigning to the mentor with the lowest current workload
+    for (const appId of application_ids) {
+      const app = await dbGet(`SELECT full_name FROM applications WHERE application_id = ?`, [appId]);
+      if (!app) continue;
+
+      // Sort to find mentor with lowest workload count
+      mentorWorkloads.sort((a, b) => a.count - b.count);
+      const chosen = mentorWorkloads[0];
+
+      // Perform assignment
+      await dbRun(
+        `UPDATE applications SET mentor_id = ?, mentor_name = ?, updated_at = ? WHERE application_id = ?`,
+        [chosen.mentor.id, chosen.mentor.full_name, time, appId]
+      );
+
+      // Increment workload count locally to distribute the next ones correctly
+      chosen.count++;
+
+      // Notify Intern & Mentor
+      await dbRun(
+        `INSERT INTO notifications (application_id, role, title, message, type, created_at)
+         VALUES (?, 'intern', 'Mentor Assigned', 'Mentor ${chosen.mentor.full_name} has been assigned to guide you.', 'feedback', ?)`,
+        [appId, time]
+      );
+      await dbRun(
+        `INSERT INTO notifications (mentor_id, role, title, message, type, created_at)
+         VALUES (?, 'mentor', 'New Intern Assigned', 'Intern ${app.full_name} (${appId}) was assigned to you.', 'assignment', ?)`,
+        [chosen.mentor.id, time]
+      );
+
+      assignedLog.push(`${appId} -> ${chosen.mentor.full_name}`);
+    }
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'admin', 'Bulk Assign Mentors', ?, ?, ?)`,
+      [req.user.email, `Bulk assigned ${application_ids.length} interns. Distribution details: ${assignedLog.join(', ')}`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: `Successfully distributed ${application_ids.length} interns among ${mentors.length} mentors.` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Get List of Interns Assigned to Logged-in Mentor
+app.get('/api/mentor/interns', authenticate, requireMentor, async (req, res) => {
+  try {
+    const query = `
+      SELECT id, application_id, full_name, email, preferred_domain, start_date, status, created_at 
+      FROM applications 
+      WHERE mentor_id = ?
+    `;
+    const interns = await dbQuery(query, [req.user.id]);
+    
+    // Add additional progress and report counts for each intern
+    const results = [];
+    for (const intern of interns) {
+      // Calculate report counts
+      const reportsCount = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE application_id = ?`, [intern.application_id]);
+      const approvedCount = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE application_id = ? AND status = 'Approved'`, [intern.application_id]);
+      const pendingReport = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE application_id = ? AND status = 'Pending'`, [intern.application_id]);
+      
+      // Calculate task progress percentage from project assignment
+      const project = await dbGet(`SELECT tasks FROM project_assignments WHERE application_id = ?`, [intern.application_id]);
+      let progress = 0;
+      if (project && project.tasks) {
+        try {
+          const tasks = JSON.parse(project.tasks);
+          if (tasks.length > 0) {
+            const completed = tasks.filter(t => t.status === 'Completed').length;
+            progress = Math.round((completed / tasks.length) * 100);
+          }
+        } catch (e) {
+          progress = 0;
+        }
+      }
+
+      results.push({
+        ...intern,
+        reports_count: reportsCount ? reportsCount.count : 0,
+        approved_reports_count: approvedCount ? approvedCount.count : 0,
+        weekly_report_status: (pendingReport && pendingReport.count > 0) ? 'Pending Review' : 'Up to Date',
+        progress_percentage: progress
+      });
+    }
+
+    return res.json({ success: true, interns: results });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Weekly Reporting - Intern Submit Report
+app.post('/api/intern/submit-report', authenticate, requireInternOrAdmin, async (req, res) => {
+  const application_id = req.user.application_id;
+  const {
+    work_completed,
+    tasks_accomplished,
+    technologies_learned,
+    evidence_data,
+    evidence_name,
+    github_url,
+    deployment_url,
+    challenges_faced,
+    learning_outcome,
+    next_week_plan,
+    hours_worked
+  } = req.body;
+
+  if (!work_completed || !tasks_accomplished || !hours_worked) {
+    return res.status(400).json({ error: 'Work completed, tasks accomplished, and hours worked are required.' });
+  }
+
+  try {
+    // 1. Automatically calculate Week Number
+    const existingReports = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE application_id = ?`, [application_id]);
+    const week_number = (existingReports ? existingReports.count : 0) + 1;
+
+    // Fetch the assigned mentor
+    const app = await dbGet(`SELECT mentor_id FROM applications WHERE application_id = ?`, [application_id]);
+    const mentor_id = app ? app.mentor_id : null;
+
+    const time = new Date().toISOString();
+
+    await dbRun(
+      `INSERT INTO weekly_reports (
+        application_id, week_number, work_completed, tasks_accomplished, technologies_learned,
+        evidence_path, evidence_data, github_url, deployment_url, challenges_faced,
+        learning_outcome, next_week_plan, hours_worked, status, submitted_at, mentor_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)`,
+      [
+        application_id, week_number, work_completed, tasks_accomplished, technologies_learned || '',
+        evidence_name || null, evidence_data || null, github_url || '', deployment_url || '', challenges_faced || '',
+        learning_outcome || '', next_week_plan || '', parseInt(hours_worked) || 0, time, mentor_id
+      ]
+    );
+
+    // Create Notification for Mentor
+    if (mentor_id) {
+      await dbRun(
+        `INSERT INTO notifications (mentor_id, role, title, message, type, created_at)
+         VALUES (?, 'mentor', 'New Report Submitted', 'Intern ${req.user.full_name} has submitted Weekly Report #${week_number} for review.', 'report_status', ?)`,
+        [mentor_id, time]
+      );
+    }
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'intern', 'Submit Weekly Report', ?, ?, ?)`,
+      [req.user.email, `Submitted weekly report #${week_number} with ${hours_worked} hours worked`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: `Weekly Report #${week_number} submitted successfully.` });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Weekly Reporting - Retrieve reports for logged-in Intern
+app.get('/api/intern/reports', authenticate, requireInternOrAdmin, async (req, res) => {
+  const application_id = req.user.application_id;
+  try {
+    const reports = await dbQuery(
+      `SELECT * FROM weekly_reports WHERE application_id = ? ORDER BY week_number DESC`,
+      [application_id]
+    );
+    return res.json({ success: true, reports });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Weekly Reporting - Get pending reports for Mentor review
+app.get('/api/mentor/reports/pending', authenticate, requireMentor, async (req, res) => {
+  try {
+    const query = `
+      SELECT r.*, a.full_name as intern_name, a.preferred_domain as domain
+      FROM weekly_reports r
+      JOIN applications a ON r.application_id = a.application_id
+      WHERE r.mentor_id = ? AND r.status = 'Pending'
+      ORDER BY r.submitted_at ASC
+    `;
+    const reports = await dbQuery(query, [req.user.id]);
+    return res.json({ success: true, reports });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Weekly Reporting - Get all reviewed reports history for Mentor
+app.get('/api/mentor/reports/reviewed', authenticate, requireMentor, async (req, res) => {
+  try {
+    const query = `
+      SELECT r.*, a.full_name as intern_name, a.preferred_domain as domain
+      FROM weekly_reports r
+      JOIN applications a ON r.application_id = a.application_id
+      WHERE r.mentor_id = ? AND r.status != 'Pending'
+      ORDER BY r.reviewed_at DESC
+    `;
+    const reports = await dbQuery(query, [req.user.id]);
+    return res.json({ success: true, reports });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Weekly Reporting - Review Weekly Report (Approve/Reject/Request resubmission)
+app.post('/api/mentor/reports/:id/review', authenticate, requireMentor, async (req, res) => {
+  const { id } = req.params;
+  const { status, feedback, score } = req.body;
+
+  if (!status || !['Approved', 'Rejected', 'Resubmission Required'].includes(status)) {
+    return res.status(400).json({ error: 'A valid review status is required.' });
+  }
+
+  try {
+    const report = await dbGet(`SELECT * FROM weekly_reports WHERE id = ? AND mentor_id = ?`, [id, req.user.id]);
+    if (!report) return res.status(404).json({ error: 'Weekly report not found or you are not authorized to review it.' });
+
+    const time = new Date().toISOString();
+    const finalScore = score !== undefined ? parseInt(score) : null;
+
+    await dbRun(
+      `UPDATE weekly_reports
+       SET status = ?, feedback = ?, score = ?, reviewed_at = ?
+       WHERE id = ?`,
+      [status, feedback || '', finalScore, time, id]
+    );
+
+    // Notify Intern
+    await dbRun(
+      `INSERT INTO notifications (application_id, role, title, message, type, created_at)
+       VALUES (?, 'intern', 'Weekly Report Reviewed', 'Your weekly report #${report.week_number} has been marked as ${status}. Feedback: "${feedback || ''}"', 'report_status', ?)`,
+      [report.application_id, time]
+    );
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, 'mentor', 'Review Weekly Report', ?, ?, ?)`,
+      [req.user.email, `Reviewed report id ${id} for intern ${report.application_id} (Status: ${status}, Score: ${finalScore})`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: `Report review marked as ${status} successfully.` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Google Meet scheduler API (Admin or Mentor)
+app.post('/api/meetings', authenticate, requireMentorOrAdmin, async (req, res) => {
+  const { title, description, meeting_date, meeting_time, meet_link, meeting_type, target_domain, target_mentor_id, target_application_id } = req.body;
+  if (!title || !meeting_date || !meeting_time || !meet_link || !meeting_type) {
+    return res.status(400).json({ error: 'Meeting Title, Date, Time, Meet link, and Type are required.' });
+  }
+
+  try {
+    const creator = req.user.role === 'admin' ? 'Manchester Technologies Official' : req.user.full_name;
+    const time = new Date().toISOString();
+
+    await dbRun(
+      `INSERT INTO meetings (
+        title, description, meeting_date, meeting_time, meet_link, meeting_type,
+        target_domain, target_mentor_id, target_application_id, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        title.trim(), description || '', meeting_date, meeting_time, meet_link.trim(), meeting_type,
+        target_domain || null, target_mentor_id || null, target_application_id || null, creator, time
+      ]
+    );
+
+    // Notify target audience
+    if (meeting_type === 'All Interns') {
+      await dbRun(
+        `INSERT INTO notifications (role, title, message, type, created_at)
+         VALUES ('intern', 'New Meeting Scheduled', 'A new meeting titled "${title}" has been scheduled for all interns.', 'meeting', ?)`,
+        [time]
+      );
+    } else if (meeting_type === 'Domain Based' && target_domain) {
+      await dbRun(
+        `INSERT INTO notifications (role, title, message, type, created_at)
+         VALUES ('intern', 'Domain Meeting Scheduled', 'A meeting has been scheduled for ${target_domain} interns: "${title}".', 'meeting', ?)`,
+        [time]
+      );
+    } else if (meeting_type === 'Group Based' && target_mentor_id) {
+      await dbRun(
+        `INSERT INTO notifications (mentor_id, role, title, message, type, created_at)
+         VALUES (?, 'intern', 'Mentor Group Meeting', 'Your mentor has scheduled a group sync: "${title}".', 'meeting', ?)`,
+        [target_mentor_id, time]
+      );
+    } else if (meeting_type === 'Individual Intern' && target_application_id) {
+      await dbRun(
+        `INSERT INTO notifications (application_id, role, title, message, type, created_at)
+         VALUES (?, 'intern', 'One-on-One Meeting', 'A 1:1 meeting has been scheduled for you: "${title}".', 'meeting', ?)`,
+        [target_application_id, time]
+      );
+    }
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, ?, 'Schedule Meeting', ?, ?, ?)`,
+      [req.user.email, req.user.role, `Scheduled meeting "${title}" of type ${meeting_type}`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: 'Meeting scheduled successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Retrieve Meetings list for target user
+app.get('/api/meetings', authenticate, async (req, res) => {
+  try {
+    let query = '';
+    let params = [];
+
+    if (req.user.role === 'admin') {
+      query = `SELECT * FROM meetings ORDER BY meeting_date ASC, meeting_time ASC`;
+    } else if (req.user.role === 'mentor') {
+      query = `
+        SELECT * FROM meetings 
+        WHERE meeting_type = 'All Interns' 
+           OR target_mentor_id = ? 
+           OR created_by = ?
+        ORDER BY meeting_date ASC, meeting_time ASC
+      `;
+      params = [req.user.id, req.user.full_name];
+    } else { // Intern
+      const app = await dbGet(`SELECT preferred_domain, mentor_id FROM applications WHERE application_id = ?`, [req.user.application_id]);
+      const domain = app ? app.preferred_domain : '';
+      const mentorId = app ? app.mentor_id : 0;
+
+      query = `
+        SELECT * FROM meetings 
+        WHERE meeting_type = 'All Interns'
+           OR (meeting_type = 'Domain Based' AND LOWER(target_domain) = LOWER(?))
+           OR (meeting_type = 'Group Based' AND target_mentor_id = ?)
+           OR (meeting_type = 'Individual Intern' AND target_application_id = ?)
+        ORDER BY meeting_date ASC, meeting_time ASC
+      `;
+      params = [domain, mentorId, req.user.application_id];
+    }
+
+    const meetings = await dbQuery(query, params);
+    return res.json({ success: true, meetings });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Mark Attendance for a Meeting
+app.post('/api/meetings/:id/attendance', authenticate, requireMentorOrAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { attendanceRoster } = req.body; 
+
+  if (!attendanceRoster || !Array.isArray(attendanceRoster)) {
+    return res.status(400).json({ error: 'A valid attendance roster array is required.' });
+  }
+
+  try {
+    const meeting = await dbGet(`SELECT * FROM meetings WHERE id = ?`, [id]);
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found.' });
+
+    const marker = req.user.role === 'admin' ? 'Admin' : req.user.full_name;
+    const time = new Date().toISOString();
+
+    for (const record of attendanceRoster) {
+      const exists = await dbGet(`SELECT id FROM attendance WHERE meeting_id = ? AND application_id = ?`, [id, record.application_id]);
+      if (exists) {
+        await dbRun(
+          `UPDATE attendance SET status = ?, marked_by = ?, marked_at = ? WHERE id = ?`,
+          [record.status, marker, time, exists.id]
+        );
+      } else {
+        await dbRun(
+          `INSERT INTO attendance (meeting_id, application_id, status, marked_by, marked_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, record.application_id, record.status, marker, time]
+        );
+      }
+    }
+
+    return res.json({ success: true, message: 'Attendance registered successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Get Attendance Roster for a Meeting
+app.get('/api/meetings/:id/attendance', authenticate, requireMentorOrAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const meeting = await dbGet(`SELECT * FROM meetings WHERE id = ?`, [id]);
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found.' });
+
+    const attendance = await dbQuery(`SELECT * FROM attendance WHERE meeting_id = ?`, [id]);
+    
+    let eligibleInterns = [];
+    if (meeting.meeting_type === 'All Interns') {
+      eligibleInterns = await dbQuery(`SELECT application_id, full_name, email, preferred_domain FROM applications WHERE status IN ('Selected', 'Active Intern')`);
+    } else if (meeting.meeting_type === 'Domain Based' && meeting.target_domain) {
+      eligibleInterns = await dbQuery(`SELECT application_id, full_name, email, preferred_domain FROM applications WHERE status IN ('Selected', 'Active Intern') AND LOWER(preferred_domain) = LOWER(?)`, [meeting.target_domain]);
+    } else if (meeting.meeting_type === 'Group Based' && meeting.target_mentor_id) {
+      eligibleInterns = await dbQuery(`SELECT application_id, full_name, email, preferred_domain FROM applications WHERE status IN ('Selected', 'Active Intern') AND mentor_id = ?`, [meeting.target_mentor_id]);
+    } else if (meeting.meeting_type === 'Individual Intern' && meeting.target_application_id) {
+      eligibleInterns = await dbQuery(`SELECT application_id, full_name, email, preferred_domain FROM applications WHERE application_id = ?`, [meeting.target_application_id]);
+    }
+
+    const roster = eligibleInterns.map(intern => {
+      const att = attendance.find(a => a.application_id === intern.application_id);
+      return {
+        ...intern,
+        status: att ? att.status : 'Unmarked',
+        marked_at: att ? att.marked_at : null
+      };
+    });
+
+    return res.json({ success: true, roster });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Announcement System - Create Announcement (Admin or Mentor)
+app.post('/api/announcements', authenticate, requireMentorOrAdmin, async (req, res) => {
+  const { title, message, meet_link, audience_type, target_domain, target_mentor_id, attachment_name, attachment_data } = req.body;
+  if (!title || !message || !audience_type) {
+    return res.status(400).json({ error: 'Title, message, and audience type are required.' });
+  }
+
+  try {
+    const creator = req.user.role === 'admin' ? 'Manchester Technologies Official' : req.user.full_name;
+    const time = new Date().toISOString();
+
+    await dbRun(
+      `INSERT INTO announcements (
+        title, message, meet_link, audience_type, target_domain, target_mentor_id,
+        attachment_path, attachment_data, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        title.trim(), message.trim(), meet_link || null, audience_type, target_domain || null, target_mentor_id || null,
+        attachment_name || null, attachment_data || null, creator, time
+      ]
+    );
+
+    // Push notification to target audience
+    await dbRun(
+      `INSERT INTO notifications (role, title, message, type, created_at)
+       VALUES ('intern', 'Broadcasting Notice: ' || ?, ?, 'announcement', ?)`,
+      [title, message.substring(0, 150), time]
+    );
+
+    // Log Activity
+    await dbRun(
+      `INSERT INTO activity_logs (user_id, role, action, details, ip_address, created_at)
+       VALUES (?, ?, 'Create Announcement', ?, ?, ?)`,
+      [req.user.email, req.user.role, `Created announcement "${title}"`, req.ip || '', time]
+    );
+
+    return res.json({ success: true, message: 'Announcement broadcasted successfully.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// View Announcements list
+app.get('/api/announcements', authenticate, async (req, res) => {
+  try {
+    let query = '';
+    let params = [];
+
+    if (req.user.role === 'admin') {
+      query = `SELECT * FROM announcements ORDER BY created_at DESC`;
+    } else if (req.user.role === 'mentor') {
+      query = `
+        SELECT * FROM announcements 
+        WHERE audience_type = 'All Interns' 
+           OR target_mentor_id = ? 
+           OR created_by = ?
+        ORDER BY created_at DESC
+      `;
+      params = [req.user.id, req.user.full_name];
+    } else { // Intern
+      const app = await dbGet(`SELECT preferred_domain, mentor_id FROM applications WHERE application_id = ?`, [req.user.application_id]);
+      const domain = app ? app.preferred_domain : '';
+      const mentorId = app ? app.mentor_id : 0;
+
+      query = `
+        SELECT * FROM announcements 
+        WHERE audience_type = 'All Interns'
+           OR (audience_type = 'Domain' AND LOWER(target_domain) = LOWER(?))
+           OR (audience_type = 'Group' AND target_mentor_id = ?)
+        ORDER BY created_at DESC
+      `;
+      params = [domain, mentorId];
+    }
+
+    const announcements = await dbQuery(query, params);
+    return res.json({ success: true, announcements });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Group Communication System - Messages
+app.get('/api/communication/channels/:type/:name/messages', authenticate, async (req, res) => {
+  const { type, name } = req.params;
+  try {
+    const messages = await dbQuery(
+      `SELECT * FROM group_messages WHERE channel_type = ? AND channel_name = ? ORDER BY created_at ASC LIMIT 100`,
+      [type, name]
+    );
+    return res.json({ success: true, messages });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.post('/api/communication/channels/:type/:name/messages', authenticate, async (req, res) => {
+  const { type, name } = req.params;
+  const { message } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'Message content is required.' });
+  }
+
+  try {
+    const time = new Date().toISOString();
+    let senderId = '';
+    let senderName = '';
+    let senderRole = req.user.role;
+
+    if (req.user.role === 'admin') {
+      senderId = 'admin';
+      senderName = 'Manchester Technologies Official';
+    } else if (req.user.role === 'mentor') {
+      senderId = String(req.user.id);
+      senderName = req.user.full_name;
+    } else { // Intern
+      senderId = req.user.application_id;
+      senderName = req.user.full_name;
+    }
+
+    await dbRun(
+      `INSERT INTO group_messages (channel_type, channel_name, sender_id, sender_name, sender_role, message, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [type, name, senderId, senderName, senderRole, message.trim(), time]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Notifications Endpoint
+app.get('/api/notifications', authenticate, async (req, res) => {
+  try {
+    let notifications = [];
+    if (req.user.role === 'admin') {
+      notifications = await dbQuery(`SELECT * FROM notifications WHERE role = 'admin' ORDER BY created_at DESC LIMIT 50`);
+    } else if (req.user.role === 'mentor') {
+      notifications = await dbQuery(
+        `SELECT * FROM notifications WHERE (role = 'mentor' AND (mentor_id = ? OR mentor_id IS NULL)) ORDER BY created_at DESC LIMIT 50`,
+        [req.user.id]
+      );
+    } else { // Intern
+      notifications = await dbQuery(
+        `SELECT * FROM notifications WHERE (role = 'intern' AND (application_id = ? OR application_id IS NULL)) ORDER BY created_at DESC LIMIT 50`,
+        [req.user.application_id]
+      );
+    }
+    return res.json({ success: true, notifications });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.post('/api/notifications/read', authenticate, async (req, res) => {
+  try {
+    if (req.user.role === 'admin') {
+      await dbRun(`UPDATE notifications SET is_read = 1 WHERE role = 'admin'`);
+    } else if (req.user.role === 'mentor') {
+      await dbRun(`UPDATE notifications SET is_read = 1 WHERE role = 'mentor' AND (mentor_id = ? OR mentor_id IS NULL)`, [req.user.id]);
+    } else { // Intern
+      await dbRun(`UPDATE notifications SET is_read = 1 WHERE role = 'intern' AND (application_id = ? OR application_id IS NULL)`, [req.user.application_id]);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Real-Time Notification Polling Endpoint (Lightweight Socket.IO alternative for serverless VM hosts)
+app.get('/api/notifications/poll', authenticate, async (req, res) => {
+  const { since } = req.query; // timestamp
+  try {
+    let messagesQuery = '';
+    let notificationsQuery = '';
+    let params = [since || ''];
+
+    if (req.user.role === 'admin') {
+      notificationsQuery = `SELECT * FROM notifications WHERE role = 'admin' AND created_at > ? ORDER BY created_at ASC`;
+      messagesQuery = `SELECT * FROM group_messages WHERE created_at > ? ORDER BY created_at ASC`;
+      
+      const newNotifs = await dbQuery(notificationsQuery, params);
+      const newMsgs = await dbQuery(messagesQuery, params);
+      return res.json({ success: true, newNotifications: newNotifs, newMessages: newMsgs });
+    } else if (req.user.role === 'mentor') {
+      notificationsQuery = `SELECT * FROM notifications WHERE role = 'mentor' AND (mentor_id = ? OR mentor_id IS NULL) AND created_at > ? ORDER BY created_at ASC`;
+      messagesQuery = `
+        SELECT * FROM group_messages 
+        WHERE created_at > ? 
+          AND (channel_type = 'Global' 
+           OR (channel_type = 'Domain' AND LOWER(channel_name) = LOWER(?))
+           OR (channel_type = 'Mentor' AND channel_name = ?))
+        ORDER BY created_at ASC
+      `;
+      const mentor = await dbGet(`SELECT domain FROM mentors WHERE id = ?`, [req.user.id]);
+      const domain = mentor ? mentor.domain : '';
+      
+      const newNotifs = await dbQuery(notificationsQuery, [req.user.id, since || '']);
+      const newMsgs = await dbQuery(messagesQuery, [since || '', domain, `MentorGroup-${req.user.id}`]);
+      return res.json({ success: true, newNotifications: newNotifs, newMessages: newMsgs });
+    } else { // Intern
+      const app = await dbGet(`SELECT preferred_domain, mentor_id FROM applications WHERE application_id = ?`, [req.user.application_id]);
+      const domain = app ? app.preferred_domain : '';
+      const mentorId = app ? app.mentor_id : 0;
+
+      notificationsQuery = `SELECT * FROM notifications WHERE role = 'intern' AND (application_id = ? OR application_id IS NULL) AND created_at > ? ORDER BY created_at ASC`;
+      messagesQuery = `
+        SELECT * FROM group_messages 
+        WHERE created_at > ? 
+          AND (channel_type = 'Global' 
+           OR (channel_type = 'Domain' AND LOWER(channel_name) = LOWER(?))
+           OR (channel_type = 'Mentor' AND channel_name = ?))
+        ORDER BY created_at ASC
+      `;
+      
+      const newNotifs = await dbQuery(notificationsQuery, [req.user.application_id, since || '']);
+      const newMsgs = await dbQuery(messagesQuery, [since || '', domain, `MentorGroup-${mentorId}`]);
+      return res.json({ success: true, newNotifications: newNotifs, newMessages: newMsgs });
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Chronological Activity Timeline log
+app.get('/api/intern/timeline', authenticate, requireInternOrAdmin, async (req, res) => {
+  const application_id = req.user.role === 'admin' ? req.query.application_id : req.user.application_id;
+  if (!application_id) return res.status(400).json({ error: 'Application ID is required.' });
+
+  try {
+    const timeline = [];
+
+    // 1. Fetch application details
+    const app = await dbGet(`SELECT created_at, termsAccepted, signedAt FROM applications WHERE application_id = ?`, [application_id]);
+    if (!app) return res.status(404).json({ error: 'Intern not found.' });
+
+    timeline.push({
+      event: 'Internship Joined',
+      description: 'Submitted application and registered in Manchester Technologies database.',
+      timestamp: app.created_at
+    });
+
+    if (app.termsAccepted && app.signedAt) {
+      timeline.push({
+        event: 'Offer Accepted & Agreement Signed',
+        description: 'Accepted terms and conditions and digitally signed the internship agreement.',
+        timestamp: app.signedAt
+      });
+    }
+
+    // 2. Fetch weekly reports
+    const reports = await dbQuery(`SELECT week_number, status, submitted_at, reviewed_at FROM weekly_reports WHERE application_id = ?`, [application_id]);
+    for (const rep of reports) {
+      timeline.push({
+        event: `Weekly Report #${rep.week_number} Submitted`,
+        description: `Logged work status (Review Status: ${rep.status})`,
+        timestamp: rep.submitted_at
+      });
+
+      if (rep.reviewed_at) {
+        timeline.push({
+          event: `Weekly Report #${rep.week_number} Reviewed`,
+          description: `Mentor completed evaluation (Result: ${rep.status})`,
+          timestamp: rep.reviewed_at
+        });
+      }
+    }
+
+    // 3. Fetch meetings attended
+    const attendance = await dbQuery(
+      `SELECT a.status, a.marked_at, m.title 
+       FROM attendance a
+       JOIN meetings m ON a.meeting_id = m.id
+       WHERE a.application_id = ?`,
+      [application_id]
+    );
+    for (const att of attendance) {
+      timeline.push({
+        event: `Meeting Attendance: ${att.status}`,
+        description: `Checked in for scheduled session "${att.title}"`,
+        timestamp: att.marked_at
+      });
+    }
+
+    // 4. Fetch certificate generated
+    const cert = await dbGet(`SELECT created_at, certificate_number FROM certificates WHERE application_id = ?`, [application_id]);
+    if (cert) {
+      timeline.push({
+        event: 'Certificate Generated',
+        description: `Completed internship. Standard Certificate generated: ${cert.certificate_number}`,
+        timestamp: cert.created_at
+      });
+    }
+
+    // Sort chronologically descending
+    timeline.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    return res.json({ success: true, timeline });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Performance Scoring calculations
+app.get('/api/intern/performance-metrics', authenticate, requireInternOrAdmin, async (req, res) => {
+  const application_id = req.user.role === 'admin' ? req.query.application_id : req.user.application_id;
+  if (!application_id) return res.status(400).json({ error: 'Application ID is required.' });
+
+  try {
+    // 1. Weekly Report Score (Avg Score of approved reports)
+    const reports = await dbQuery(`SELECT score FROM weekly_reports WHERE application_id = ? AND status = 'Approved'`, [application_id]);
+    let reportAvg = 0;
+    if (reports.length > 0) {
+      const totalScore = reports.reduce((sum, r) => sum + (r.score || 0), 0);
+      reportAvg = Math.round(totalScore / reports.length);
+    } else {
+      const anyReports = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE application_id = ?`, [application_id]);
+      reportAvg = (anyReports && anyReports.count > 0) ? 75 : 0;
+    }
+
+    // 2. Attendance Score (Attendance % based on meetings)
+    const meetingsCount = await dbGet(
+      `SELECT COUNT(*) as count FROM attendance WHERE application_id = ?`,
+      [application_id]
+    );
+    const presentCount = await dbGet(
+      `SELECT COUNT(*) as count FROM attendance WHERE application_id = ? AND status = 'Present'`,
+      [application_id]
+    );
+    const attendancePercent = (meetingsCount && meetingsCount.count > 0)
+      ? Math.round((presentCount.count / meetingsCount.count) * 100)
+      : 100; // default 100 if no meetings yet
+
+    // 3. Project Task Score
+    const project = await dbGet(`SELECT tasks FROM project_assignments WHERE application_id = ?`, [application_id]);
+    let taskPercent = 0;
+    if (project && project.tasks) {
+      try {
+        const tasks = JSON.parse(project.tasks);
+        if (tasks.length > 0) {
+          const completed = tasks.filter(t => t.status === 'Completed').length;
+          taskPercent = Math.round((completed / tasks.length) * 100);
+        } else {
+          taskPercent = 100;
+        }
+      } catch (e) {
+        taskPercent = 0;
+      }
+    } else {
+      taskPercent = 0;
+    }
+
+    // Calculate Overall Performance Score (Average)
+    const overallScore = Math.round((reportAvg + attendancePercent + taskPercent) / 3);
+
+    return res.json({
+      success: true,
+      metrics: {
+        weekly_report_score: reportAvg,
+        attendance_score: attendancePercent,
+        task_completion_score: taskPercent,
+        overall_score: overallScore
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Admin Advanced Analytics Dashboard calculations
+app.get('/api/admin/analytics', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const totalInterns = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status IN ('Selected', 'Active Intern', 'Completed')`);
+    const activeInterns = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE status = 'Active Intern'`);
+    
+    const totalAttRecords = await dbGet(`SELECT COUNT(*) as count FROM attendance`);
+    const presentAttRecords = await dbGet(`SELECT COUNT(*) as count FROM attendance WHERE status = 'Present'`);
+    const attendanceRate = (totalAttRecords && totalAttRecords.count > 0)
+      ? Math.round((presentAttRecords.count / totalAttRecords.count) * 100)
+      : 85; 
+
+    const totalReports = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports`);
+    const reviewedReports = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE status != 'Pending'`);
+    const mentorReviewRate = (totalReports && totalReports.count > 0)
+      ? Math.round((reviewedReports.count / totalReports.count) * 100)
+      : 95; 
+
+    const domains = await dbQuery(
+      `SELECT preferred_domain as domain, COUNT(*) as count 
+       FROM applications 
+       WHERE status IN ('Selected', 'Active Intern', 'Completed')
+       GROUP BY preferred_domain`
+    );
+
+    const mentors = await dbQuery(`SELECT id, full_name FROM mentors`);
+    const mentorInternCounts = [];
+    for (const m of mentors) {
+      const countRow = await dbGet(`SELECT COUNT(*) as count FROM applications WHERE mentor_id = ?`, [m.id]);
+      mentorInternCounts.push({
+        mentor_name: m.full_name,
+        count: countRow ? countRow.count : 0
+      });
+    }
+
+    const interns = await dbQuery(
+      `SELECT application_id, full_name, preferred_domain FROM applications WHERE status IN ('Selected', 'Active Intern') LIMIT 15`
+    );
+    const rankings = [];
+    for (const intern of interns) {
+      const reports = await dbQuery(`SELECT score FROM weekly_reports WHERE application_id = ? AND status = 'Approved'`, [intern.application_id]);
+      let reportAvg = reports.length > 0 ? reports.reduce((sum, r) => sum + (r.score || 0), 0) / reports.length : 80;
+      
+      const presentCount = await dbGet(`SELECT COUNT(*) as count FROM attendance WHERE application_id = ? AND status = 'Present'`, [intern.application_id]);
+      const totalCount = await dbGet(`SELECT COUNT(*) as count FROM attendance WHERE application_id = ?`, [intern.application_id]);
+      let attScore = (totalCount && totalCount.count > 0) ? (presentCount.count / totalCount.count) * 100 : 90;
+
+      const score = Math.round((reportAvg + attScore) / 2);
+      rankings.push({
+        application_id: intern.application_id,
+        full_name: intern.full_name,
+        domain: intern.preferred_domain,
+        score
+      });
+    }
+
+    const topRankings = [...rankings].sort((a, b) => b.score - a.score).slice(0, 5);
+    const bottomRankings = [...rankings].sort((a, b) => a.score - b.score).slice(0, 5);
+
+    const mentorPerformers = [];
+    for (const m of mentors) {
+      const totalRep = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE mentor_id = ?`, [m.id]);
+      const reviewedRep = await dbGet(`SELECT COUNT(*) as count FROM weekly_reports WHERE mentor_id = ? AND status != 'Pending'`, [m.id]);
+      const rate = (totalRep && totalRep.count > 0) ? Math.round((reviewedRep.count / totalRep.count) * 100) : 100;
+      mentorPerformers.push({
+        mentor_name: m.full_name,
+        completion_rate: rate,
+        total_reports: totalRep ? totalRep.count : 0
+      });
+    }
+    mentorPerformers.sort((a, b) => b.completion_rate - a.completion_rate);
+
+    return res.json({
+      success: true,
+      analytics: {
+        total_interns: totalInterns ? totalInterns.count : 0,
+        active_interns: activeInterns ? activeInterns.count : 0,
+        submission_rate: totalReports && totalReports.count > 0 ? Math.round((reviewedReports.count / totalReports.count) * 100) : 80,
+        attendance_rate: attendanceRate,
+        mentor_review_rate: mentorReviewRate,
+        domains_distribution: domains,
+        mentors_distribution: mentorInternCounts,
+        top_rankings: topRankings,
+        bottom_rankings: bottomRankings,
+        best_mentor: mentorPerformers[0] || { mentor_name: 'None', completion_rate: 100 }
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
 });
 

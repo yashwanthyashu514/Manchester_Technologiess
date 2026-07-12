@@ -119,6 +119,30 @@ export default function InternshipsLanding() {
 
   return (
     <main className="pt-20">
+      {/* Quick Action Navigation Bar */}
+      <section className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="glass-card px-6 py-4 border border-white/5 bg-white/[0.02] backdrop-blur-md rounded-2xl shadow-xl flex flex-wrap justify-center sm:justify-between items-center gap-4">
+          <span className="text-xs font-bold text-accent uppercase tracking-widest">⚡ Quick Internship Gateway:</span>
+          <div className="flex flex-wrap gap-3">
+            <Link to="/internships/apply" className="px-4 py-2 rounded-xl text-xs font-semibold bg-accent text-background hover:bg-accent/80 transition-all">
+              Apply Now
+            </Link>
+            <Link to="/internships/track-status" className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-all">
+              Track Status
+            </Link>
+            <Link to="/internships/verify-signature" className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-all">
+              Verify Signature
+            </Link>
+            <Link to="/internships/verify-certificate/MT-2026-000001" className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-all">
+              Verify Certificate
+            </Link>
+            <Link to="/internships/help" className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-all">
+              Help Center &amp; Guides
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Hero Section */}
       <section className="section-padding py-28 relative overflow-hidden max-w-7xl mx-auto">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] pointer-events-none" />

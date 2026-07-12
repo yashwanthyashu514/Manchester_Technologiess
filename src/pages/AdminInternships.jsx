@@ -24,7 +24,10 @@ import {
   Award,
   CheckSquare,
   Square,
-  FileText
+  FileText,
+  Shuffle,
+  BarChart3,
+  ShieldCheck
 } from 'lucide-react'
 import AnimatedSection from '../components/AnimatedSection'
 
@@ -106,6 +109,19 @@ export default function AdminInternships() {
   })
   const [isSavingStatus, setIsSavingStatus] = useState(false)
 
+  // Mentor Management & Assignments & Analytics States
+  const [mentors, setMentors] = useState([])
+  const [isMentorsLoading, setIsMentorsLoading] = useState(false)
+  const [isSavingMentor, setIsSavingMentor] = useState(false)
+  const [mentorAction, setMentorAction] = useState('list') // 'list' | 'add' | 'edit' | 'reset_password'
+  const [selectedMentor, setSelectedMentor] = useState(null)
+  const [mentorForm, setMentorForm] = useState({ email: '', password: '', full_name: '', domain: 'Full Stack', status: 'Active' })
+  const [tempResetPassword, setTempResetPassword] = useState('')
+  const [selectedBulkInterns, setSelectedBulkInterns] = useState([])
+  const [targetAssignMentor, setTargetAssignMentor] = useState('')
+  const [analyticsData, setAnalyticsData] = useState(null)
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
+
   // Signed Documents
   const [signedDocs, setSignedDocs] = useState([])
   const [signedDocsSearch, setSignedDocsSearch] = useState('')
@@ -143,6 +159,157 @@ export default function AdminInternships() {
       }
     } catch (e) {
       console.error('Failed to load signed documents:', e)
+    }
+  }
+
+  const fetchMentors = async () => {
+    setIsMentorsLoading(true)
+    try {
+      const res = await fetch('/api/admin/mentors', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setMentors(data.mentors || [])
+      }
+    } catch (e) {
+      console.error('Failed to load mentors:', e)
+    } finally {
+      setIsMentorsLoading(false)
+    }
+  }
+
+  const fetchAnalytics = async () => {
+    setIsAnalyticsLoading(true)
+    try {
+      const res = await fetch('/api/admin/analytics', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAnalyticsData(data.analytics || null)
+      }
+    } catch (e) {
+      console.error('Failed to load analytics:', e)
+    } finally {
+      setIsAnalyticsLoading(false)
+    }
+  }
+
+  const handleSaveMentor = async (e) => {
+    e.preventDefault()
+    setIsSavingMentor(true)
+    try {
+      const isEdit = mentorAction === 'edit'
+      const url = isEdit ? `/api/admin/mentors/${selectedMentor.id}` : '/api/admin/mentors'
+      const method = isEdit ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(mentorForm)
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert(isEdit ? 'Mentor updated successfully.' : 'Mentor created successfully.')
+        setMentorAction('list')
+        setSelectedMentor(null)
+        setMentorForm({ email: '', password: '', full_name: '', domain: 'Full Stack', status: 'Active' })
+        fetchMentors()
+      } else {
+        alert(result.error || 'Failed to save mentor profile.')
+      }
+    } catch (err) {
+      alert('Error saving mentor.')
+    } finally {
+      setIsSavingMentor(false)
+    }
+  }
+
+  const handleResetMentorPassword = async (e) => {
+    e.preventDefault()
+    if (!tempResetPassword.trim()) return
+    try {
+      const res = await fetch('/api/admin/mentors/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ mentor_id: selectedMentor.id, password: tempResetPassword })
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert('Mentor password reset successfully.')
+        setMentorAction('list')
+        setTempResetPassword('')
+        setSelectedMentor(null)
+      } else {
+        alert(result.error || 'Failed to reset password.')
+      }
+    } catch (err) {
+      alert('Error resetting password.')
+    }
+  }
+
+  const handleAssignMentorManual = async (appId, mentorId) => {
+    try {
+      const res = await fetch('/api/admin/assign-mentor/manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ application_id: appId, mentor_id: mentorId })
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert('Intern assigned successfully.')
+        fetchApplications()
+        fetchStatusRecords()
+      } else {
+        alert(result.error || 'Failed to assign mentor.')
+      }
+    } catch (err) {
+      alert('Error executing assignment.')
+    }
+  }
+
+  const handleAssignMentorsBulk = async () => {
+    if (selectedBulkInterns.length === 0) {
+      alert('Please select at least one candidate for bulk assignment.')
+      return
+    }
+    if (!targetAssignMentor) {
+      alert('Please select at least one active mentor.')
+      return
+    }
+    try {
+      const res = await fetch('/api/admin/assign-mentor/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          application_ids: selectedBulkInterns, 
+          mentor_ids: [targetAssignMentor]
+        })
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert(result.message || 'Bulk assignment completed.')
+        setSelectedBulkInterns([])
+        setTargetAssignMentor('')
+        fetchApplications()
+        fetchStatusRecords()
+      } else {
+        alert(result.error || 'Failed to distribute.')
+      }
+    } catch (err) {
+      alert('Error distributing interns.')
     }
   }
 
@@ -216,13 +383,17 @@ export default function AdminInternships() {
     }
   }
 
-  // Fetch status or signatures on tab change
+  // Fetch status or signatures or mentors or analytics on tab change
   useEffect(() => {
     if (isAdmin) {
       if (currentTab === 'status_mgmt') {
         fetchStatusRecords()
       } else if (currentTab === 'signed_docs') {
         fetchSignedDocs()
+      } else if (currentTab === 'mentors_mgmt' || currentTab === 'assignments_mgmt') {
+        fetchMentors()
+      } else if (currentTab === 'analytics_board') {
+        fetchAnalytics()
       }
     }
   }, [currentTab, statusSearch, statusFilter, signedDocsSearch, isAdmin])
@@ -260,36 +431,58 @@ export default function AdminInternships() {
     setIsAdmin(false)
   }
 
-  // Admin Login Submission
+  // Unified Admin and Mentor Login Submission
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoginError(null)
     setIsLoggingIn(true)
 
     try {
-      const res = await fetch('/api/auth/admin-login', {
+      // First try Admin Login
+      const adminRes = await fetch('/api/auth/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       })
 
-      let data = {}
-      const contentType = res.headers.get('content-type')
-      if (contentType && contentType.includes('application/json')) {
-        data = await res.json()
-      } else {
-        // Fallback for HTML error pages or non-JSON responses from servers like Vercel
-        throw new Error('Server returned an invalid response. Please ensure database connections are configured correctly.')
+      let adminData = {}
+      const adminContentType = adminRes.headers.get('content-type')
+      if (adminContentType && adminContentType.includes('application/json')) {
+        adminData = await adminRes.json()
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Login verification failed.')
+      if (adminRes.ok && adminData.token) {
+        localStorage.setItem('token', adminData.token)
+        localStorage.setItem('user', JSON.stringify(adminData.user))
+        setToken(adminData.token)
+        setIsAdmin(true)
+        return
       }
 
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
-      setToken(data.token)
-      setIsAdmin(true)
+      // If admin login failed, try Mentor Login
+      const mentorRes = await fetch('/api/auth/mentor-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+
+      let mentorData = {}
+      const mentorContentType = mentorRes.headers.get('content-type')
+      if (mentorContentType && mentorContentType.includes('application/json')) {
+        mentorData = await mentorRes.json()
+      }
+
+      if (mentorRes.ok && mentorData.token) {
+        localStorage.setItem('token', mentorData.token)
+        localStorage.setItem('user', JSON.stringify(mentorData.user))
+        navigate('/mentor/dashboard')
+        return
+      }
+
+      // If both failed, throw error
+      const errorMessage = mentorData.error || adminData.error || 'Authentication failed. Please verify credentials.'
+      throw new Error(errorMessage)
+
     } catch (err) {
       console.error(err)
       setLoginError(err.message || 'Network credentials failure.')
@@ -741,8 +934,8 @@ export default function AdminInternships() {
               
               <div className="text-center mb-8">
                 <Lock className="w-12 h-12 text-accent mx-auto mb-4" />
-                <h1 className="heading-md text-white">Admin Dashboard Login</h1>
-                <p className="text-xs text-text-secondary mt-1">Manchester Technologies Portal Control</p>
+                <h1 className="heading-md text-white font-bold text-xl">Portal Dashboard Login</h1>
+                <p className="text-xs text-text-secondary mt-1">Admin & Mentor Portal Control</p>
               </div>
 
               {loginError && (
@@ -758,7 +951,7 @@ export default function AdminInternships() {
                   <input 
                     type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none text-sm"
-                    placeholder="admin@manchestertechnologies.com"
+                    placeholder="name@manchestertechnologies.com"
                   />
                 </div>
 
@@ -806,11 +999,14 @@ export default function AdminInternships() {
         </div>
 
         {/* TAB SELECTOR */}
-        <div className="flex border-b border-white/10 gap-2">
+        <div className="flex border-b border-white/10 gap-2 overflow-x-auto scrollbar-none pb-1">
           {[
             { id: 'roster', label: 'Candidates Roster', icon: Users },
             { id: 'status_mgmt', label: 'Status Management', icon: Award },
-            { id: 'signed_docs', label: 'Signed Documents', icon: FileText }
+            { id: 'signed_docs', label: 'Signed Documents', icon: FileText },
+            { id: 'mentors_mgmt', label: 'Mentor Management', icon: UserCheck },
+            { id: 'assignments_mgmt', label: 'Smart Assignment', icon: Shuffle },
+            { id: 'analytics_board', label: 'Advanced Analytics', icon: BarChart3 }
           ].map((tab) => {
             const IconComponent = tab.icon;
             const isSelected = currentTab === tab.id;
@@ -822,7 +1018,7 @@ export default function AdminInternships() {
                   setSelectedApp(null);
                   setSelectedAppDetails(null);
                 }}
-                className={`flex items-center gap-2 px-5 py-3 text-xs font-bold transition-all border-b-2 uppercase tracking-wider ${
+                className={`flex items-center gap-2 px-5 py-3 text-xs font-bold transition-all border-b-2 uppercase tracking-wider whitespace-nowrap ${
                   isSelected
                     ? 'border-accent text-accent bg-accent/5'
                     : 'border-transparent text-text-secondary hover:text-white hover:bg-white/5'
@@ -856,6 +1052,8 @@ export default function AdminInternships() {
         </div>
 
         {/* SEARCH AND FILTERS TOOLBAR */}
+        {false && (
+          <>
         <div className="glass-card p-5 border border-white/5">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-4 items-center">
             <div className="relative md:col-span-3">
@@ -1328,6 +1526,8 @@ export default function AdminInternships() {
           </AnimatePresence>
 
         </div>
+          </>
+        )}
 
 
 
@@ -1967,6 +2167,458 @@ export default function AdminInternships() {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ─── TAB 4: MENTOR MANAGEMENT ───────────────────────────────────── */}
+        {currentTab === 'mentors_mgmt' && (
+          <div className="space-y-6">
+            {/* Toolbar */}
+            <div className="glass-card p-5 border border-white/5 flex flex-wrap justify-between items-center gap-4 text-left">
+              <div>
+                <h3 className="font-heading font-bold text-white text-sm">Predefined Mentor Profiles</h3>
+                <p className="text-xs text-text-secondary mt-1">Manage active supervisors, track workloads, and reset credentials.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedMentor(null)
+                  setMentorForm({ email: '', password: '', full_name: '', domain: 'Full Stack', status: 'Active' })
+                  setMentorAction('add')
+                }}
+                className="glow-button px-5 py-2 text-xs flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Add Mentor Account
+              </button>
+            </div>
+
+            {/* List */}
+            {isMentorsLoading ? (
+              <div className="py-12 text-center text-xs text-text-secondary">
+                <Loader2 className="w-6 h-6 animate-spin text-accent mx-auto mb-2" />
+                Loading registered mentor rosters...
+              </div>
+            ) : (
+              <div className="glass-card border border-white/5 overflow-hidden text-left">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-background/40 text-text-secondary uppercase font-semibold">
+                        <th className="p-4">Mentor Name</th>
+                        <th className="p-4">Email Address</th>
+                        <th className="p-4">Specialization</th>
+                        <th className="p-4">Active Interns</th>
+                        <th className="p-4">Completed Interns</th>
+                        <th className="p-4">Account Status</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-white/90">
+                      {mentors.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" className="p-8 text-center text-text-muted">No mentor profiles created yet.</td>
+                        </tr>
+                      ) : (
+                        mentors.map((m) => (
+                          <tr key={m.id} className="hover:bg-white/5 transition-colors">
+                            <td className="p-4 font-bold text-white">{m.full_name}</td>
+                            <td className="p-4">{m.email}</td>
+                            <td className="p-4 text-text-secondary">{m.domain || 'General'}</td>
+                            <td className="p-4 font-bold text-cyan-400">{m.active_count} active</td>
+                            <td className="p-4 text-green-400">{m.completed_count} completed</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${
+                                m.status === 'Active' ? 'text-green-400 border-green-500/20 bg-green-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5'
+                              }`}>
+                                {m.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right space-x-3">
+                              <button
+                                onClick={() => {
+                                  setSelectedMentor(m)
+                                  setMentorForm({ email: m.email, password: '', full_name: m.full_name, domain: m.domain || 'Full Stack', status: m.status })
+                                  setMentorAction('edit')
+                                }}
+                                className="text-accent hover:underline font-bold"
+                              >
+                                Edit Profile
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedMentor(m)
+                                  setTempResetPassword('')
+                                  setMentorAction('reset_password')
+                                }}
+                                className="text-yellow-400 hover:underline font-bold"
+                              >
+                                Reset Pwd
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── TAB 5: SMART INTERN ASSIGNMENT ───────────────────────────────── */}
+        {currentTab === 'assignments_mgmt' && (
+          <div className="space-y-6 text-left">
+            {/* Intro */}
+            <div className="glass-card p-5 border border-white/5 flex flex-col md:flex-row justify-between gap-4 items-center">
+              <div>
+                <h3 className="font-heading font-bold text-white text-sm">Workload-Balanced Mentor Assignment</h3>
+                <p className="text-xs text-text-secondary mt-1">Distribute selected candidates evenly among available specialized supervisors.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Interns List */}
+              <div className="lg:col-span-8 glass-card border border-white/5 overflow-hidden">
+                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">Candidate Assignment Roster</h4>
+                  <span className="text-[11px] text-text-muted">Select checkboxes to trigger workload balancing distribution</span>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-background/40 text-text-secondary uppercase font-semibold">
+                        <th className="p-4 w-10">
+                          <input 
+                            type="checkbox"
+                            checked={selectedBulkInterns.length === applications.filter(a => ['Selected', 'Active Intern'].includes(a.status)).length && applications.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedBulkInterns(applications.filter(a => ['Selected', 'Active Intern'].includes(a.status)).map(a => a.application_id))
+                              } else {
+                                setSelectedBulkInterns([])
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="p-4">Intern ID</th>
+                        <th className="p-4">Candidate Name</th>
+                        <th className="p-4">Domain</th>
+                        <th className="p-4">Assigned Mentor</th>
+                        <th className="p-4">Direct Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-white/90">
+                      {applications.filter(a => ['Selected', 'Active Intern'].includes(a.status)).length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="p-8 text-center text-text-muted">No active or selected candidates in registry.</td>
+                        </tr>
+                      ) : (
+                        applications.filter(a => ['Selected', 'Active Intern'].includes(a.status)).map((app) => (
+                          <tr key={app.id} className="hover:bg-white/5 transition-colors">
+                            <td className="p-4">
+                              <input 
+                                type="checkbox"
+                                checked={selectedBulkInterns.includes(app.application_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedBulkInterns(prev => [...prev, app.application_id])
+                                  } else {
+                                    setSelectedBulkInterns(prev => prev.filter(id => id !== app.application_id))
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-4 font-mono font-bold text-accent">{app.application_id}</td>
+                            <td className="p-4 font-bold text-white">{app.full_name}</td>
+                            <td className="p-4">{app.preferred_domain}</td>
+                            <td className="p-4 text-text-secondary">{app.mentor_name || 'Unassigned'}</td>
+                            <td className="p-4">
+                              <select
+                                onChange={(e) => handleAssignMentorManual(app.application_id, e.target.value)}
+                                defaultValue=""
+                                className="bg-background border border-white/20 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                              >
+                                <option value="" disabled>Manual reassign...</option>
+                                {mentors.filter(m => m.status === 'Active').map(m => (
+                                  <option key={m.id} value={m.id}>{m.full_name} ({m.domain})</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Bulk control pane */}
+              <div className="lg:col-span-4 glass-card p-6 border border-white/5 space-y-4">
+                <h4 className="text-xs font-bold text-accent uppercase tracking-wider">Bulk Workload Distribution</h4>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Select candidates on the left roster. Then choose a mentor from the target dropdown. 
+                  The system will run workload balancing calculations to equally split selected interns among selected active supervisors.
+                </p>
+
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] text-text-muted block">Selected Candidates Count: <strong>{selectedBulkInterns.length}</strong></span>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase">Target Mentor Pool *</label>
+                  <select 
+                    value={targetAssignMentor} onChange={(e) => setTargetAssignMentor(e.target.value)}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+                  >
+                    <option value="">Select Mentor</option>
+                    {mentors.filter(m => m.status === 'Active').map(m => (
+                      <option key={m.id} value={m.id}>{m.full_name} ({m.domain})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button 
+                  onClick={handleAssignMentorsBulk}
+                  className="glow-button w-full py-3 text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Shuffle className="w-4 h-4" /> Run Bulk Distribution
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── TAB 6: ADVANCED ANALYTICS BOARD ───────────────────────────────── */}
+        {currentTab === 'analytics_board' && (
+          <div className="space-y-6 text-left">
+            {isAnalyticsLoading ? (
+              <div className="py-20 text-center text-xs text-text-secondary">
+                <Loader2 className="w-8 h-8 animate-spin text-accent mx-auto mb-2" />
+                Loading system metrics data...
+              </div>
+            ) : !analyticsData ? (
+              <div className="glass-card p-10 text-center text-xs text-red-400">Failed to load analytics dashboard.</div>
+            ) : (
+              <div className="space-y-8">
+                {/* Visual stats cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Weekly Report Completion Rate', val: `${analyticsData.submission_rate}%`, desc: 'Average approved reviews', color: 'text-emerald-400' },
+                    { label: 'Roster Meet Attendance Rate', val: `${analyticsData.attendance_rate}%`, desc: 'Active cohort calls participation', color: 'text-cyan-400' },
+                    { label: 'Mentor Review Response Rate', val: `${analyticsData.mentor_review_rate}%`, desc: 'Time-bound report evaluations', color: 'text-yellow-400' },
+                    { label: 'Best Performing Mentor Group', val: analyticsData.best_mentor?.mentor_name || 'None', desc: `Completion Rate: ${analyticsData.best_mentor?.completion_rate || 100}%`, color: 'text-purple-400' }
+                  ].map((card, idx) => (
+                    <div key={idx} className="glass-card p-5 border border-white/5 space-y-2">
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider font-bold block">{card.label}</span>
+                      <strong className={`text-2xl font-heading block ${card.color}`}>{card.val}</strong>
+                      <span className="text-[10px] text-text-secondary block">{card.desc}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Domain Distributions */}
+                  <div className="glass-card p-6 border border-white/5 space-y-4">
+                    <h4 className="text-xs font-bold text-accent uppercase tracking-wider">Domain Cohort Distribution</h4>
+                    <div className="space-y-3">
+                      {analyticsData.domains_distribution.map((dom, idx) => (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex justify-between text-xs text-white">
+                            <span>{dom.domain}</span>
+                            <strong>{dom.count} interns</strong>
+                          </div>
+                          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-accent" style={{ width: `${Math.min(100, (dom.count / analyticsData.total_interns) * 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mentor Distribution workloads */}
+                  <div className="glass-card p-6 border border-white/5 space-y-4">
+                    <h4 className="text-xs font-bold text-accent uppercase tracking-wider">Mentor Supervisions Workload Share</h4>
+                    <div className="space-y-3">
+                      {analyticsData.mentors_distribution.map((ment, idx) => (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex justify-between text-xs text-white">
+                            <span>{ment.mentor_name}</span>
+                            <strong>{ment.count} interns</strong>
+                          </div>
+                          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-cyan-400" style={{ width: `${Math.min(100, (ment.count / Math.max(1, analyticsData.total_interns)) * 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top/Bottom Rankings Warnings */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="glass-card p-6 border border-white/5 space-y-4">
+                    <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider">Top Performing Cohort Candidates</h4>
+                    <div className="space-y-2 text-xs">
+                      {analyticsData.top_rankings.length === 0 ? (
+                        <p className="text-text-muted">No performance grades logged yet.</p>
+                      ) : (
+                        analyticsData.top_rankings.map((rank, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-white/[0.01] p-2.5 rounded border border-white/5">
+                            <div>
+                              <strong className="text-white block">{rank.full_name}</strong>
+                              <span className="text-[10px] text-text-secondary mt-0.5">{rank.domain} | {rank.application_id}</span>
+                            </div>
+                            <strong className="text-green-400 text-sm">{rank.score}%</strong>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="glass-card p-6 border border-white/5 space-y-4">
+                    <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider">Cohort Candidates Requiring Attention</h4>
+                    <div className="space-y-2 text-xs">
+                      {analyticsData.bottom_rankings.length === 0 ? (
+                        <p className="text-text-muted">All active candidates meeting quality benchmarks.</p>
+                      ) : (
+                        analyticsData.bottom_rankings.map((rank, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-white/[0.01] p-2.5 rounded border border-white/5">
+                            <div>
+                              <strong className="text-white block">{rank.full_name}</strong>
+                              <span className="text-[10px] text-text-secondary mt-0.5">{rank.domain} | {rank.application_id}</span>
+                            </div>
+                            <strong className="text-red-400 text-sm">{rank.score}%</strong>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MODAL POPUPS FOR ADD/EDIT MENTORS & PASSWORDS */}
+        {['add', 'edit'].includes(mentorAction) && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <form onSubmit={handleSaveMentor} className="glass-card max-w-md w-full border border-white/10 p-6 space-y-4 text-left bg-background/95">
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <h3 className="font-heading font-bold text-white text-base">{mentorAction === 'edit' ? 'Edit Mentor Profile' : 'Add New Mentor Account'}</h3>
+                <button type="button" onClick={() => setMentorAction('list')} className="text-text-secondary hover:text-white font-bold">&times;</button>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Full Name *</label>
+                  <input 
+                    type="text" required value={mentorForm.full_name} 
+                    onChange={(e) => setMentorForm({...mentorForm, full_name: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none"
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Registered Email Address *</label>
+                  <input 
+                    type="email" required value={mentorForm.email} 
+                    onChange={(e) => setMentorForm({...mentorForm, email: e.target.value})}
+                    disabled={mentorAction === 'edit'}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none disabled:opacity-50"
+                    placeholder="mentor@manchestertechnologies.com"
+                  />
+                </div>
+
+                {mentorAction === 'add' && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Secure Login Password *</label>
+                    <input 
+                      type="password" required value={mentorForm.password} 
+                      onChange={(e) => setMentorForm({...mentorForm, password: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Technical Specialization Domain *</label>
+                  <select 
+                    value={mentorForm.domain} 
+                    onChange={(e) => setMentorForm({...mentorForm, domain: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none"
+                  >
+                    <option value="Full Stack">Full Stack</option>
+                    <option value="AI/ML">AI/ML</option>
+                    <option value="Data Science">Data Science</option>
+                    <option value="Cyber Security">Cyber Security</option>
+                  </select>
+                </div>
+
+                {mentorAction === 'edit' && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Account Access Status</label>
+                    <select 
+                      value={mentorForm.status} 
+                      onChange={(e) => setMentorForm({...mentorForm, status: e.target.value})}
+                      className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Disabled">Disabled</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-white/5">
+                <button 
+                  type="submit" disabled={isSavingMentor}
+                  className="glow-button flex-grow py-3 text-xs"
+                >
+                  {isSavingMentor ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Save Mentor Profile
+                </button>
+                <button type="button" onClick={() => setMentorAction('list')} className="glow-button-outline px-5 py-3 text-xs font-bold">Cancel</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {mentorAction === 'reset_password' && selectedMentor && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <form onSubmit={handleResetMentorPassword} className="glass-card max-w-md w-full border border-white/10 p-6 space-y-4 text-left bg-background/95">
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <h3 className="font-heading font-bold text-white text-base">Reset Mentor Credentials</h3>
+                <button type="button" onClick={() => setMentorAction('list')} className="text-text-secondary hover:text-white font-bold">&times;</button>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <p className="text-text-secondary leading-relaxed">
+                  Resetting credentials for <strong>{selectedMentor.full_name}</strong> ({selectedMentor.email}). 
+                  Enter a new password below.
+                </p>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">New Secure Password *</label>
+                  <input 
+                    type="password" required value={tempResetPassword} 
+                    onChange={(e) => setTempResetPassword(e.target.value)}
+                    className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white focus:outline-none"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-white/5">
+                <button 
+                  type="submit"
+                  className="glow-button flex-grow py-3 text-xs"
+                >
+                  Reset Password
+                </button>
+                <button type="button" onClick={() => setMentorAction('list')} className="glow-button-outline px-5 py-3 text-xs font-bold">Cancel</button>
+              </div>
+            </form>
           </div>
         )}
 

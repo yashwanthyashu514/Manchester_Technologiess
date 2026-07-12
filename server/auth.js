@@ -59,3 +59,23 @@ export const requireInternOrAdmin = (req, res, next) => {
   }
   next();
 };
+
+/**
+ * Role checking middleware (Mentor only)
+ */
+export const requireMentor = (req, res, next) => {
+  if (!req.user || req.user.role !== 'mentor') {
+    return res.status(403).json({ error: 'Forbidden: Mentor access only.' });
+  }
+  next();
+};
+
+/**
+ * Role checking middleware (Mentor or Admin)
+ */
+export const requireMentorOrAdmin = (req, res, next) => {
+  if (!req.user || (req.user.role !== 'mentor' && req.user.role !== 'admin')) {
+    return res.status(403).json({ error: 'Forbidden: Mentor or Admin access only.' });
+  }
+  next();
+};

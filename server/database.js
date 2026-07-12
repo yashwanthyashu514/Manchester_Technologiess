@@ -248,7 +248,9 @@ export const initDb = async () => {
     { name: 'browserInfo', type: 'TEXT' },
     { name: 'deviceInfo', type: 'TEXT' },
     { name: 'ipAddress', type: 'TEXT' },
-    { name: 'signedPdfVersion', type: 'TEXT' }
+    { name: 'signedPdfVersion', type: 'TEXT' },
+    { name: 'mentor_id', type: 'INTEGER' },
+    { name: 'mentor_name', type: 'TEXT' }
   ];
 
 
@@ -378,6 +380,161 @@ export const initDb = async () => {
       await dbRun(`ALTER TABLE application_status ADD COLUMN ${col.name} ${col.type}`);
     } catch (err) { /* column already exists */ }
   }
+
+  // Mentors Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS mentors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email VARCHAR(100) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      domain TEXT,
+      status VARCHAR(50) DEFAULT 'Active', -- 'Active', 'Disabled'
+      created_at TEXT NOT NULL,
+      updated_at TEXT
+    )
+  `);
+
+  // Seed Predefined Mentors
+  const mentorsToSeed = [
+    { email: 'pallavids359@gmail.com', full_name: 'Pallavi D S', domain: 'Full Stack' },
+    { email: 'r23616901@gmail.com', full_name: 'Mentor R', domain: 'AI/ML' },
+    { email: 'dgprateeksha01@gmail.com', full_name: 'Prateeksha D G', domain: 'Data Science' }
+  ];
+  const defaultMentorHash = bcrypt.hashSync('Mentor@2026', 10);
+  for (const mentor of mentorsToSeed) {
+    try {
+      const mentorExists = await dbGet(`SELECT id FROM mentors WHERE email = ?`, [mentor.email]);
+      if (!mentorExists) {
+        await dbRun(`
+          INSERT INTO mentors (email, password_hash, full_name, domain, status, created_at)
+          VALUES (?, ?, ?, ?, 'Active', ?)
+        `, [mentor.email, defaultMentorHash, mentor.full_name, mentor.domain, new Date().toISOString()]);
+        console.log(`👤 Seeded predefined mentor: ${mentor.email}`);
+      }
+    } catch (err) {
+      console.error('Error seeding mentor:', err);
+    }
+  }
+
+  // Weekly Reports Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      application_id VARCHAR(50) NOT NULL,
+      week_number INTEGER NOT NULL,
+      work_completed TEXT NOT NULL,
+      tasks_accomplished TEXT NOT NULL,
+      technologies_learned TEXT, -- Comma-separated tags
+      evidence_path TEXT,
+      evidence_data TEXT, -- Base64 representation of evidence files
+      github_url TEXT,
+      deployment_url TEXT,
+      challenges_faced TEXT,
+      learning_outcome TEXT,
+      next_week_plan TEXT,
+      hours_worked INTEGER NOT NULL,
+      status VARCHAR(50) DEFAULT 'Pending', -- 'Pending', 'Approved', 'Rejected', 'Resubmission Required'
+      feedback TEXT,
+      score INTEGER,
+      submitted_at TEXT NOT NULL,
+      reviewed_at TEXT,
+      mentor_id INTEGER,
+      FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE,
+      FOREIGN KEY(mentor_id) REFERENCES mentors(id)
+    )
+  `);
+
+  // Meetings Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      meeting_date TEXT NOT NULL,
+      meeting_time TEXT NOT NULL,
+      meet_link TEXT NOT NULL,
+      meeting_type VARCHAR(50) NOT NULL, -- 'All Interns', 'Domain Based', 'Group Based', 'Individual Intern'
+      target_domain TEXT,
+      target_mentor_id INTEGER,
+      target_application_id VARCHAR(50),
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  // Attendance Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL,
+      application_id VARCHAR(50) NOT NULL,
+      status VARCHAR(50) NOT NULL, -- 'Present', 'Absent', 'Excused'
+      marked_by TEXT NOT NULL,
+      marked_at TEXT NOT NULL,
+      FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+      FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+    )
+  `);
+
+  // Announcements Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      attachment_path TEXT,
+      attachment_data TEXT, -- Base64
+      meet_link TEXT,
+      audience_type VARCHAR(50) NOT NULL, -- 'All Interns', 'Domain', 'Group'
+      target_domain TEXT,
+      target_mentor_id INTEGER,
+      created_by TEXT NOT NULL, -- e.g. 'Manchester Technologies Official' or Mentor name
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  // Group Messages Table (communication channels)
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS group_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_type VARCHAR(50) NOT NULL, -- 'Global', 'Domain', 'Mentor'
+      channel_name VARCHAR(100) NOT NULL, -- 'Global', 'AI/ML', etc.
+      sender_id TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      sender_role VARCHAR(50) NOT NULL, -- 'admin', 'mentor', 'intern'
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  // Notifications Table
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      application_id VARCHAR(50), -- NULL if global
+      mentor_id INTEGER, -- NULL if global
+      role VARCHAR(50), -- 'admin', 'mentor', 'intern'
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  // Activity Logs Table (Security and auditing)
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      role VARCHAR(50) NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
 
   // Admin Users Table
   await runInitQuery(`

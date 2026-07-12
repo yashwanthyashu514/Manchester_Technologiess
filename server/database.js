@@ -320,6 +320,65 @@ export const initDb = async () => {
     )
   `);
 
+  // Application Status Table (Admin-managed simplified status tracking)
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS application_status (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tracking_id VARCHAR(50) NOT NULL,
+      email TEXT NOT NULL,
+      candidate_name TEXT NOT NULL,
+      domain TEXT,
+      mentor TEXT,
+      status VARCHAR(50) DEFAULT 'Under Review',
+      start_date TEXT,
+      reporting_details TEXT,
+      remarks TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT
+    )
+  `);
+
+  // Digital Signatures Table (MT-SIGN certificate ID tracking)
+  await runInitQuery(`
+    CREATE TABLE IF NOT EXISTS digital_signatures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      certificate_id VARCHAR(50) UNIQUE NOT NULL,
+      application_id VARCHAR(50) NOT NULL,
+      email TEXT NOT NULL,
+      candidate_name TEXT,
+      domain TEXT,
+      signature_image TEXT,
+      signed_at TEXT NOT NULL,
+      ip_address TEXT,
+      browser_info TEXT,
+      document_path TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  // Migrate digital_signatures columns if table already exists
+  const digSigColumns = [
+    { name: 'candidate_name', type: 'TEXT' },
+    { name: 'domain', type: 'TEXT' },
+    { name: 'document_path', type: 'TEXT' }
+  ];
+  for (const col of digSigColumns) {
+    try {
+      await dbRun(`ALTER TABLE digital_signatures ADD COLUMN ${col.name} ${col.type}`);
+    } catch (err) { /* column already exists */ }
+  }
+
+  // Migrate application_status columns if table already exists
+  const appStatusColumns = [
+    { name: 'reporting_details', type: 'TEXT' },
+    { name: 'remarks', type: 'TEXT' }
+  ];
+  for (const col of appStatusColumns) {
+    try {
+      await dbRun(`ALTER TABLE application_status ADD COLUMN ${col.name} ${col.type}`);
+    } catch (err) { /* column already exists */ }
+  }
+
   // Admin Users Table
   await runInitQuery(`
     CREATE TABLE IF NOT EXISTS admins (

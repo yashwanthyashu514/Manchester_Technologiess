@@ -19,8 +19,11 @@ import {
 import {
   sendAdminNotification,
   sendApplicantConfirmation,
-  sendInterviewInvitation
+  sendInterviewInvitation,
+  sendSelectionNotification,
+  sendSignatureConfirmation
 } from './email.js';
+
 import {
   authenticate,
   requireAdmin,
@@ -44,6 +47,34 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ── Simple in-memory rate limiter ─────────────────────────────────────────
+const rateLimitStore = new Map();
+const rateLimit = (maxRequests = 10, windowMs = 60000) => (req, res, next) => {
+  const key = req.ip || req.connection?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowStart = now - windowMs;
+  if (!rateLimitStore.has(key)) {
+    rateLimitStore.set(key, []);
+  }
+  const requests = rateLimitStore.get(key).filter(ts => ts > windowStart);
+  requests.push(now);
+  rateLimitStore.set(key, requests);
+  if (requests.length > maxRequests) {
+    return res.status(429).json({ error: 'Too many requests. Please wait a moment before trying again.' });
+  }
+  next();
+};
+// Cleanup old entries every 5 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 120000;
+  for (const [key, timestamps] of rateLimitStore.entries()) {
+    const fresh = timestamps.filter(ts => ts > cutoff);
+    if (fresh.length === 0) rateLimitStore.delete(key);
+    else rateLimitStore.set(key, fresh);
+  }
+}, 300000);
+
 
 // Ensure upload folder exists
 const isVercel = !!process.env.VERCEL;
@@ -415,6 +446,131 @@ app.get('/api/internships/verify-certificate/:certificateNumber', async (req, re
   }
 });
 
+// Track Application Status (simplified 3-state view from application_status table)
+app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res) => {
+  const { email, tracking_id } = req.body;
+  if (!email || !tracking_id) {
+    return res.status(400).json({ error: 'Gmail and Tracking ID are required.' });
+  }
+
+  try {
+    const record = await dbGet(
+      `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND tracking_id = ?`,
+      [email.trim(), tracking_id.trim().toUpperCase()]
+    );
+
+    if (!record) {
+      return res.status(404).json({ error: 'No record found. Please verify your Gmail and Tracking ID.' });
+    }
+
+    // If Selected, check if they already signed T&C
+    let termsAccepted = false;
+    let signedAt = null;
+    let certificateId = null;
+    if (record.status === 'Selected') {
+      const appRecord = await dbGet(
+        `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
+        [email.trim(), tracking_id.trim().toUpperCase()]
+      );
+      const normalized = normalizeAppKeys(appRecord || {});
+      termsAccepted = !!normalized.termsAccepted;
+      signedAt = normalized.signedAt;
+
+      if (termsAccepted) {
+        const sigRecord = await dbGet(
+          `SELECT certificate_id FROM digital_signatures WHERE application_id = ?`,
+          [tracking_id.trim().toUpperCase()]
+        );
+        certificateId = sigRecord ? sigRecord.certificate_id : null;
+      }
+    }
+
+    return res.json({
+      success: true,
+      record: {
+        id: record.id,
+        tracking_id: record.tracking_id,
+        email: record.email,
+        candidate_name: record.candidate_name,
+        domain: record.domain,
+        mentor: record.mentor,
+        status: record.status,
+        start_date: record.start_date,
+        reporting_details: record.reporting_details,
+        remarks: record.remarks,
+        created_at: record.created_at,
+        updated_at: record.updated_at
+      },
+      termsAccepted,
+      signedAt,
+      certificateId
+    });
+
+  } catch (error) {
+    console.error('Track status error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Verify Internship Signature (Public Route) — checks MT-SIGN certificate IDs
+app.get('/api/internships/verify-signature/:certId', rateLimit(15, 60000), async (req, res) => {
+  const { certId } = req.params;
+  try {
+    const sig = await dbGet(
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ?`,
+      [certId.toUpperCase()]
+    );
+    if (!sig) {
+      return res.status(404).json({ valid: false, error: 'Invalid Certificate ID. No matching signature record found.' });
+    }
+    return res.json({
+      valid: true,
+      signature: {
+        certificate_id: sig.certificate_id,
+        candidate_name: sig.candidate_name,
+        email: sig.email,
+        domain: sig.domain,
+        application_id: sig.application_id,
+        signed_at: sig.signed_at,
+        created_at: sig.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Verify signature error:', error);
+    return res.status(500).json({ error: 'Internal verification error.' });
+  }
+});
+
+// POST version of verify-signature (for form submissions)
+app.post('/api/internships/verify-signature', rateLimit(15, 60000), async (req, res) => {
+  const { cert_id } = req.body;
+  if (!cert_id) return res.status(400).json({ error: 'Certificate ID is required.' });
+  try {
+    const sig = await dbGet(
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ?`,
+      [cert_id.toUpperCase()]
+    );
+    if (!sig) {
+      return res.status(404).json({ valid: false, error: 'Invalid Certificate ID. No matching signature record found.' });
+    }
+    return res.json({
+      valid: true,
+      signature: {
+        certificate_id: sig.certificate_id,
+        candidate_name: sig.candidate_name,
+        email: sig.email,
+        domain: sig.domain,
+        application_id: sig.application_id,
+        signed_at: sig.signed_at
+      }
+    });
+  } catch (error) {
+    console.error('Verify signature error:', error);
+    return res.status(500).json({ error: 'Internal verification error.' });
+  }
+});
+
+
 // SMTP Test Diagnostic Endpoint (Admin use only)
 app.get('/api/test-smtp', async (req, res) => {
   const nodemailer = await import('nodemailer');
@@ -474,7 +630,7 @@ const normalizeAppKeys = (app) => {
 // Helper: Generate Signed Agreement PDF using pdf-lib (strictly dynamic)
 const generateSignedAgreementPDF = async (appData, outputPath) => {
   try {
-    const pdfPath = path.join(__dirname, '..', 'public', 'manchestertechnologiestandc.pdf');
+    const pdfPath = path.join(__dirname, '..', 'public', 'manchestertechnologiestandc-updated.pdf');
     if (!fs.existsSync(pdfPath)) {
       throw new Error('Original Terms & Conditions PDF file not found.');
     }
@@ -564,7 +720,7 @@ const generateSignedAgreementPDF = async (appData, outputPath) => {
     drawDetailRow('Application ID:', appData.application_id || 'N/A', height - 160);
     drawDetailRow('Date of Signing:', new Date(appData.signedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), height - 180);
     drawDetailRow('Status:', 'Terms & Conditions Accepted', height - 200);
-    drawDetailRow('Signed Version:', appData.signedPdfVersion || 'manchestertechnologiestandc.pdf', height - 220);
+    drawDetailRow('Signed Version:', appData.signedPdfVersion || 'manchestertechnologiestandc-updated.pdf', height - 220);
 
     page.drawText('Acceptance Statement:', {
       x: 50,
@@ -736,7 +892,7 @@ app.post('/api/internships/submit-signature', async (req, res) => {
       deviceInfo
     }]);
 
-    const signedPdfVersion = 'manchestertechnologiestandc.pdf';
+    const signedPdfVersion = 'manchestertechnologiestandc-updated.pdf';
 
     await dbRun(
       `UPDATE applications 
@@ -763,13 +919,38 @@ app.post('/api/internships/submit-signature', async (req, res) => {
       ]
     );
 
-    console.log(`✍️ Application ${application_id} successfully signed by ${normalized.full_name}.`);
+    // Generate MT-SIGN Certificate ID
+    const year = new Date().getFullYear();
+    const sigRow = await dbGet(`SELECT COUNT(*) as count FROM digital_signatures`);
+    const sigCount = ((sigRow ? sigRow.count : 0) + 1);
+    const certId = `MT-SIGN-${year}-${String(sigCount).padStart(6, '0')}`;
+
+    // Insert into digital_signatures table
+    try {
+      await dbRun(
+        `INSERT INTO digital_signatures (certificate_id, application_id, email, candidate_name, domain, signature_image, signed_at, ip_address, browser_info, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [certId, normalized.application_id, normalized.email, normalized.full_name, normalized.preferred_domain || '', signatureImage, timestamp, clientIp, browserInfo, timestamp]
+      );
+    } catch (sigInsertErr) {
+      console.warn('⚠️ Failed to insert digital_signatures record (non-blocking):', sigInsertErr.message);
+    }
+
+    console.log(`✍️ Application ${application_id} signed by ${normalized.full_name}. Certificate ID: ${certId}`);
+
+    // Send signature confirmation email (non-blocking)
+    try {
+      await sendSignatureConfirmation(normalized.full_name, normalized.email, normalized.application_id, certId, timestamp);
+    } catch (emailErr) {
+      console.warn('⚠️ Signature confirmation email failed (non-blocking):', emailErr.message);
+    }
 
     return res.json({
       success: true,
       message: 'Terms & Conditions Successfully Accepted',
       signedAt: timestamp,
-      application_id: normalized.application_id
+      application_id: normalized.application_id,
+      certificate_id: certId
     });
 
   } catch (error) {
@@ -1458,6 +1639,183 @@ app.get('/api/admin/files/download/:filename', authenticate, requireAdmin, async
   } catch (err) {
     console.error('File download database fallback error:', err);
     return res.status(500).send('Error retrieving file from database.');
+  }
+});
+
+
+/* =========================================================================
+   ADMIN: APPLICATION STATUS MANAGEMENT (new application_status table)
+   ========================================================================= */
+
+// List all application status records (with search/filter)
+app.get('/api/admin/application-status', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { search, status } = req.query;
+    let sql = `SELECT * FROM application_status WHERE 1=1`;
+    const params = [];
+    if (search) {
+      sql += ` AND (candidate_name LIKE ? OR email LIKE ? OR tracking_id LIKE ? OR domain LIKE ?)`;
+      const w = `%${search}%`;
+      params.push(w, w, w, w);
+    }
+    if (status) {
+      sql += ` AND status = ?`;
+      params.push(status);
+    }
+    sql += ` ORDER BY created_at DESC`;
+    const records = await dbQuery(sql, params);
+    return res.json({ success: true, records });
+  } catch (error) {
+    console.error('Fetch application status list error:', error);
+    return res.status(500).json({ error: 'Failed to fetch application status records.' });
+  }
+});
+
+// Create a new application status record
+app.post('/api/admin/application-status', authenticate, requireAdmin, async (req, res) => {
+  const { tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks } = req.body;
+  if (!tracking_id || !email || !candidate_name || !status) {
+    return res.status(400).json({ error: 'Tracking ID, Email, Candidate Name, and Status are required.' });
+  }
+  try {
+    // Check for duplicate tracking_id
+    const existing = await dbGet(`SELECT id FROM application_status WHERE tracking_id = ?`, [tracking_id.toUpperCase()]);
+    if (existing) {
+      return res.status(400).json({ error: 'A record with this Tracking ID already exists.' });
+    }
+    const now = new Date().toISOString();
+    await dbRun(
+      `INSERT INTO application_status (tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tracking_id.toUpperCase(), email.trim(), candidate_name.trim(), domain || '', mentor || '', status, start_date || '', reporting_details || '', remarks || '', now, now]
+    );
+
+    // If status is 'Selected', send notification email
+    if (status === 'Selected') {
+      const statusRecord = { tracking_id: tracking_id.toUpperCase(), domain, mentor, start_date, reporting_details };
+      try {
+        await sendSelectionNotification(candidate_name, email, statusRecord);
+      } catch (emailErr) {
+        console.warn('⚠️ Selection notification email failed (non-blocking):', emailErr.message);
+      }
+    }
+
+    return res.json({ success: true, message: 'Application status record created successfully.' });
+  } catch (error) {
+    console.error('Create application status error:', error);
+    return res.status(500).json({ error: 'Failed to create application status record.' });
+  }
+});
+
+// Update an application status record
+app.put('/api/admin/application-status/:id', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { domain, mentor, status, start_date, reporting_details, remarks } = req.body;
+  try {
+    const existing = await dbGet(`SELECT * FROM application_status WHERE id = ?`, [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Record not found.' });
+    }
+    const now = new Date().toISOString();
+    await dbRun(
+      `UPDATE application_status SET domain = ?, mentor = ?, status = ?, start_date = ?, reporting_details = ?, remarks = ?, updated_at = ? WHERE id = ?`,
+      [domain || existing.domain, mentor || existing.mentor, status || existing.status, start_date || existing.start_date, reporting_details || existing.reporting_details, remarks || existing.remarks, now, id]
+    );
+
+    // If newly set to 'Selected', send notification
+    if (status === 'Selected' && existing.status !== 'Selected') {
+      const updatedRecord = { tracking_id: existing.tracking_id, domain, mentor, start_date, reporting_details };
+      try {
+        await sendSelectionNotification(existing.candidate_name, existing.email, updatedRecord);
+      } catch (emailErr) {
+        console.warn('⚠️ Selection notification email failed (non-blocking):', emailErr.message);
+      }
+    }
+
+    return res.json({ success: true, message: 'Application status record updated successfully.' });
+  } catch (error) {
+    console.error('Update application status error:', error);
+    return res.status(500).json({ error: 'Failed to update application status record.' });
+  }
+});
+
+// Delete an application status record
+app.delete('/api/admin/application-status/:id', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await dbGet(`SELECT id FROM application_status WHERE id = ?`, [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Record not found.' });
+    }
+    await dbRun(`DELETE FROM application_status WHERE id = ?`, [id]);
+    return res.json({ success: true, message: 'Record deleted successfully.' });
+  } catch (error) {
+    console.error('Delete application status error:', error);
+    return res.status(500).json({ error: 'Failed to delete record.' });
+  }
+});
+
+/* =========================================================================
+   ADMIN: DIGITAL SIGNATURES MANAGEMENT
+   ========================================================================= */
+
+// List all digital signatures (with search)
+app.get('/api/admin/digital-signatures', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { search } = req.query;
+    let sql = `SELECT id, certificate_id, application_id, email, candidate_name, domain, signed_at, ip_address, browser_info, created_at FROM digital_signatures WHERE 1=1`;
+    const params = [];
+    if (search) {
+      sql += ` AND (certificate_id LIKE ? OR application_id LIKE ? OR email LIKE ? OR candidate_name LIKE ?)`;
+      const w = `%${search}%`;
+      params.push(w, w, w, w);
+    }
+    sql += ` ORDER BY signed_at DESC`;
+    const records = await dbQuery(sql, params);
+    return res.json({ success: true, records });
+  } catch (error) {
+    console.error('Fetch digital signatures error:', error);
+    return res.status(500).json({ error: 'Failed to fetch digital signatures.' });
+  }
+});
+
+// Verify a certificate ID (admin)
+app.get('/api/admin/digital-signatures/:certId/verify', authenticate, requireAdmin, async (req, res) => {
+  const { certId } = req.params;
+  try {
+    const sig = await dbGet(`SELECT * FROM digital_signatures WHERE certificate_id = ?`, [certId.toUpperCase()]);
+    if (!sig) {
+      return res.json({ valid: false, message: 'No matching signature record found.' });
+    }
+    return res.json({ valid: true, signature: sig });
+  } catch (error) {
+    console.error('Admin verify signature error:', error);
+    return res.status(500).json({ error: 'Internal verification error.' });
+  }
+});
+
+// Admin: Download signed PDF by application id (uses existing generate function)
+app.get('/api/admin/digital-signatures/:appId/download-pdf', authenticate, requireAdmin, async (req, res) => {
+  const { appId } = req.params;
+  try {
+    // Find the application by application_id
+    const appRecord = await dbGet(`SELECT * FROM applications WHERE application_id = ?`, [appId]);
+    if (!appRecord) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+    const normalized = normalizeAppKeys(appRecord);
+    if (!normalized.termsAccepted) {
+      return res.status(400).json({ error: 'This candidate has not signed the Terms & Conditions yet.' });
+    }
+    const tempPdfName = `signed-agreement-${appId}-${Date.now()}.pdf`;
+    const tempPdfPath = path.join(CERTS_DIR, tempPdfName);
+    await generateSignedAgreementPDF(normalized, tempPdfPath);
+    res.download(tempPdfPath, `Signed_Agreement_${appId}.pdf`, (err) => {
+      try { if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath); } catch (e) {}
+    });
+  } catch (error) {
+    console.error('Admin digital signature download error:', error);
+    return res.status(500).json({ error: 'Failed to generate signed PDF.' });
   }
 });
 

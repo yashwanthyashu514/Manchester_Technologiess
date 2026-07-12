@@ -19,6 +19,9 @@ import VerifyCertificate from './pages/VerifyCertificate'
 import TermsAcceptance from './pages/TermsAcceptance'
 import DigitalSignature from './pages/DigitalSignature'
 import AdminViewSignedTc from './pages/AdminViewSignedTc'
+import TrackApplicationStatus from './pages/TrackApplicationStatus'
+import VerifySignature from './pages/VerifySignature'
+
 
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
@@ -158,6 +161,22 @@ function App() {
             element={
               <AnimatedPage>
                 <AdminViewSignedTc />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/track-status"
+            element={
+              <AnimatedPage>
+                <TrackApplicationStatus />
+              </AnimatedPage>
+            }
+          />
+          <Route
+            path="/internships/verify-signature"
+            element={
+              <AnimatedPage>
+                <VerifySignature />
               </AnimatedPage>
             }
           />

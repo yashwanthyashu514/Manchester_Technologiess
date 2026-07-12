@@ -31,6 +31,7 @@ const durations = ['30 Days', '45 Days', '60 Days']
 
 export default function InternshipApply() {
   const [step, setStep] = useState(1)
+  const isClosed = true
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [successData, setSuccessData] = useState(null)
@@ -295,9 +296,38 @@ export default function InternshipApply() {
           </p>
         </AnimatedSection>
 
-        {/* Success Page */}
-        {step === 7 && successData && (
+        {isClosed ? (
           <AnimatedSection>
+            <div className="glass-card p-10 md:p-12 text-center border border-amber-500/20 bg-amber-950/5 max-w-2xl mx-auto relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+              <ShieldAlert className="w-16 h-16 text-amber-400 mx-auto mb-6" />
+              <h2 className="heading-md mb-4 text-white">Applications Closed</h2>
+              <p className="body-md text-text-secondary mb-8 leading-relaxed">
+                Thank you for your interest in Manchester Technologies. Due to an overwhelming number of responses,
+                our internship program cohort is <strong className="text-amber-400">currently full</strong>.
+              </p>
+              <div className="bg-amber-950/20 border border-amber-500/15 p-5 rounded-xl text-xs text-text-secondary mb-8">
+                Please wait for our updates. We will post notification updates as soon as the next application cycle reopens.
+              </div>
+              <div className="flex justify-center gap-4 flex-wrap">
+                <Link to="/internships">
+                  <button className="glow-button px-6 text-xs">
+                    View Internship Program
+                  </button>
+                </Link>
+                <Link to="/internships/track-status">
+                  <button className="glow-button-outline px-6 text-xs">
+                    Track Application Status
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </AnimatedSection>
+        ) : (
+          <>
+            {/* Success Page */}
+            {step === 7 && successData && (
+              <AnimatedSection>
             <div className="glass-card p-10 text-center border border-accent/30 max-w-2xl mx-auto">
               <CheckCircle2 className="w-16 h-16 text-accent mx-auto mb-6" />
               <h2 className="heading-md mb-2 text-white">Application Submitted Successfully!</h2>
@@ -873,8 +903,10 @@ export default function InternshipApply() {
               </div>
 
             </form>
-          </div>
-        )}
+            </div>
+          )}
+        </>
+      )}
 
       </section>
     </main>

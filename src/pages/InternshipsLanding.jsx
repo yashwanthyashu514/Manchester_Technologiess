@@ -140,9 +140,14 @@ export default function InternshipsLanding() {
                   Apply Now <ArrowRight className="inline ml-1 w-5 h-5" />
                 </button>
               </Link>
-              <Link to="/internships/status">
+              <Link to="/internships/track-status">
                 <button className="glow-button-outline">
                   Track Application Status
+                </button>
+              </Link>
+              <Link to="/internships/verify-signature">
+                <button className="glow-button-outline">
+                  Verify Signature
                 </button>
               </Link>
             </div>
@@ -355,11 +360,21 @@ export default function InternshipsLanding() {
               <p className="body-md text-text-secondary mb-8">
                 Take the first step towards building a successful career in software engineering. Apply now and showcase your skills.
               </p>
-              <Link to="/internships/apply">
-                <button className="glow-button px-12 py-4 text-base">
-                  Apply For Internship
-                </button>
-              </Link>
+              <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                <Link to="/internships/apply">
+                  <button className="glow-button px-12 py-4 text-base">
+                    Apply For Internship
+                  </button>
+                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link to="/internships/track-status" className="text-xs text-text-secondary hover:text-accent transition-colors">
+                    Already applied? Track Application Status →
+                  </Link>
+                  <Link to="/internships/verify-signature" className="text-xs text-text-secondary hover:text-accent transition-colors">
+                    Verify Signed Offer Letter →
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </AnimatedSection>

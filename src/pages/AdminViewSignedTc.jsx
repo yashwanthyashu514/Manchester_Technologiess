@@ -54,7 +54,7 @@ export default function AdminViewSignedTc() {
 
     const loadPdfJs = async () => {
       if (window.pdfjsLib) {
-        initPdf('/manchestertechnologiestandc.pdf')
+        initPdf('/manchestertechnologiestandc-updated.pdf')
         return
       }
 
@@ -62,7 +62,7 @@ export default function AdminViewSignedTc() {
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js'
       script.onload = () => {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js'
-        initPdf('/manchestertechnologiestandc.pdf')
+        initPdf('/manchestertechnologiestandc-updated.pdf')
       }
       script.onerror = () => {
         setPdfLoadingError('Failed to load PDF viewer library.')
@@ -386,7 +386,7 @@ export default function AdminViewSignedTc() {
               </div>
               <div>
                 <span className="text-text-muted block uppercase text-[10px]">Signed PDF Version</span>
-                <span className="text-white print-text-dark font-mono mt-1 block">{data.signedPdfVersion || 'manchestertechnologiestandc.pdf'}</span>
+                <span className="text-white print-text-dark font-mono mt-1 block">{data.signedPdfVersion || 'manchestertechnologiestandc-updated.pdf'}</span>
               </div>
             </div>
 

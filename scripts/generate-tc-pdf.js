@@ -6,7 +6,7 @@ import PDFDocument from 'pdfkit';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const OUTPUT_PATH = path.join(PUBLIC_DIR, 'manchestertechnologiestandc.pdf');
+const OUTPUT_PATH = path.join(PUBLIC_DIR, 'manchestertechnologiestandc-updated.pdf');
 
 // Ensure public directory exists
 if (!fs.existsSync(PUBLIC_DIR)) {

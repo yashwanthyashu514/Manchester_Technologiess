@@ -52,8 +52,8 @@ function UnderReviewCard({ record }) {
 
       <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-text-muted">
         <div>
-          <span className="block font-semibold text-[10px] uppercase tracking-wider">Tracking ID</span>
-          <span className="font-mono text-accent font-bold">{record.tracking_id}</span>
+          <span className="block font-semibold text-[10px] uppercase tracking-wider">Application ID</span>
+          <span className="font-mono text-accent font-bold">{record.application_id}</span>
         </div>
         <div>
           <span className="block font-semibold text-[10px] uppercase tracking-wider">Applied Domain</span>
@@ -129,7 +129,7 @@ function SelectedCard({ record, email, navigate, termsAccepted, signedAt, certif
               </div>
               {certificateId && (
                 <div>
-                  <span className="block font-semibold">Certificate ID</span>
+                  <span className="block font-semibold">Application ID</span>
                   <span className="text-accent font-mono font-bold">{certificateId}</span>
                 </div>
               )}
@@ -140,7 +140,7 @@ function SelectedCard({ record, email, navigate, termsAccepted, signedAt, certif
               onClick={() => navigate(`/internships/verify-signature?cert=${certificateId}`)}
               className="glow-button-outline flex items-center gap-2 px-6 py-3 text-xs"
             >
-              <ShieldCheck className="w-4 h-4" /> Verify Signature Certificate
+              <ShieldCheck className="w-4 h-4" /> Verify Signature
             </button>
           )}
         </div>
@@ -150,7 +150,7 @@ function SelectedCard({ record, email, navigate, termsAccepted, signedAt, certif
             <strong>Action Required:</strong> Please accept the internship offer and sign the digital agreement to complete your onboarding.
           </div>
           <button
-            onClick={() => navigate(`/internships/terms-acceptance?appId=${record.tracking_id}&email=${email}`)}
+            onClick={() => navigate(`/internships/terms-acceptance?appId=${record.application_id}&email=${email}`)}
             id="accept-offer-btn"
             className="glow-button flex items-center gap-2 px-8 py-3 text-sm"
           >
@@ -205,7 +205,7 @@ function RejectedCard({ record }) {
 /* ─── Main Page ─────────────────────────────────────────────────────── */
 export default function TrackApplicationStatus() {
   const [gmail, setGmail] = useState('')
-  const [trackingId, setTrackingId] = useState('')
+  const [applicationId, setApplicationId] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -213,7 +213,7 @@ export default function TrackApplicationStatus() {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!gmail.trim() || !trackingId.trim()) return
+    if (!gmail.trim() || !applicationId.trim()) return
 
     setIsLoading(true)
     setError(null)
@@ -223,7 +223,7 @@ export default function TrackApplicationStatus() {
       const res = await fetch('/api/internships/track-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: gmail.trim(), tracking_id: trackingId.trim() })
+        body: JSON.stringify({ email: gmail.trim(), application_id: applicationId.trim() })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No matching record found.')
@@ -239,7 +239,7 @@ export default function TrackApplicationStatus() {
     setResult(null)
     setError(null)
     setGmail('')
-    setTrackingId('')
+    setApplicationId('')
   }
 
   return (
@@ -253,7 +253,7 @@ export default function TrackApplicationStatus() {
           </span>
           <h1 className="heading-lg mt-4 mb-2">Track Application Status</h1>
           <p className="body-md text-text-secondary max-w-xl mx-auto">
-            Enter your registered Gmail and Application Tracking ID to view your internship selection status.
+            Enter your registered Gmail and Application ID to view your internship selection status.
           </p>
         </AnimatedSection>
 
@@ -284,13 +284,13 @@ export default function TrackApplicationStatus() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-1.5">
-                        <Hash className="w-3.5 h-3.5" /> Application Tracking ID *
+                        <Hash className="w-3.5 h-3.5" /> Application ID *
                       </label>
                       <input
                         type="text"
                         required
-                        value={trackingId}
-                        onChange={(e) => setTrackingId(e.target.value.toUpperCase())}
+                        value={applicationId}
+                        onChange={(e) => setApplicationId(e.target.value.toUpperCase())}
                         placeholder="MT20260001"
                         className="w-full bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors text-sm font-mono"
                       />
@@ -312,7 +312,7 @@ export default function TrackApplicationStatus() {
 
                 <p className="text-[10px] text-text-muted mt-4 flex items-start gap-1.5">
                   <AlertCircle className="w-3 h-3 shrink-0 mt-0.5 text-accent/60" />
-                  Your Tracking ID (e.g., MT20260001) was sent to your Gmail when you applied. Both fields must match exactly.
+                  Your Application ID (e.g., MT20260001) was sent to your Gmail when you applied. Both fields must match exactly.
                 </p>
               </div>
 
@@ -364,7 +364,7 @@ export default function TrackApplicationStatus() {
                   <div>
                     <span className="text-[10px] text-text-muted uppercase tracking-wider block">Candidate</span>
                     <h2 className="text-2xl font-heading font-bold text-white mt-1">{result.record.candidate_name}</h2>
-                    <span className="text-xs text-text-secondary font-mono mt-1 block">Tracking ID: {result.record.tracking_id}</span>
+                    <span className="text-xs text-text-secondary font-mono mt-1 block">Application ID: {result.record.application_id}</span>
                   </div>
                   <div className="flex flex-col items-start md:items-end gap-2">
                     <span className="text-[10px] text-text-muted uppercase">Application Status</span>
@@ -421,7 +421,7 @@ export default function TrackApplicationStatus() {
                   href="/internships/verify-signature"
                   className="flex items-center gap-2 text-xs text-text-secondary hover:text-accent transition-colors py-2 px-4 rounded-lg hover:bg-accent/5"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" /> Verify Signature Certificate
+                  <ShieldCheck className="w-3.5 h-3.5" /> Verify Signature
                 </a>
               </div>
             </motion.div>

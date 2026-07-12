@@ -97,7 +97,7 @@ export default function AdminInternships() {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
   const [selectedStatusRecord, setSelectedStatusRecord] = useState(null)
   const [statusForm, setStatusForm] = useState({
-    tracking_id: '',
+    application_id: '',
     email: '',
     candidate_name: '',
     domain: '',
@@ -1935,7 +1935,7 @@ export default function AdminInternships() {
                 onClick={() => {
                   setSelectedStatusRecord(null)
                   setStatusForm({
-                    tracking_id: '',
+                    application_id: '',
                     email: '',
                     candidate_name: '',
                     domain: '',
@@ -1959,7 +1959,7 @@ export default function AdminInternships() {
                 <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-white/5 bg-background/40 text-text-secondary uppercase font-semibold">
-                      <th className="p-4">Tracking ID</th>
+                      <th className="p-4">Application ID</th>
                       <th className="p-4">Candidate Name</th>
                       <th className="p-4">Gmail Address</th>
                       <th className="p-4">Domain</th>
@@ -1977,7 +1977,7 @@ export default function AdminInternships() {
                     ) : (
                       statusRecords.map((rec) => (
                         <tr key={rec.id} className="hover:bg-white/5 transition-colors">
-                          <td className="p-4 font-mono font-bold text-accent">{rec.tracking_id}</td>
+                          <td className="p-4 font-mono font-bold text-accent">{rec.application_id || rec.tracking_id}</td>
                           <td className="p-4 font-bold text-white">{rec.candidate_name}</td>
                           <td className="p-4">{rec.email}</td>
                           <td className="p-4 text-text-secondary">{rec.domain || '—'}</td>
@@ -1997,7 +1997,7 @@ export default function AdminInternships() {
                               onClick={() => {
                                 setSelectedStatusRecord(rec)
                                 setStatusForm({
-                                  tracking_id: rec.tracking_id,
+                                  application_id: rec.application_id || rec.tracking_id || '',
                                   email: rec.email,
                                   candidate_name: rec.candidate_name,
                                   domain: rec.domain || '',
@@ -2051,7 +2051,7 @@ export default function AdminInternships() {
                 <span className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Verify Signature:</span>
                 <input
                   type="text"
-                  placeholder="MT-SIGN-2026-000001"
+                  placeholder="MT20260001"
                   id="cert-verify-input"
                   className="bg-background/80 border border-white/10 rounded px-2 py-1 text-xs text-white font-mono uppercase tracking-wider w-44"
                 />
@@ -2806,14 +2806,14 @@ export default function AdminInternships() {
               <form onSubmit={handleSaveStatusRecord} className="space-y-4 text-xs">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Tracking ID (e.g. MT20260001) *</label>
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Application ID (e.g. MT20260001) *</label>
                     <input
                       type="text"
                       required
                       disabled={!!selectedStatusRecord}
                       placeholder="MT20260001"
-                      value={statusForm.tracking_id}
-                      onChange={(e) => setStatusForm({ ...statusForm, tracking_id: e.target.value.toUpperCase() })}
+                      value={statusForm.application_id}
+                      onChange={(e) => setStatusForm({ ...statusForm, application_id: e.target.value.toUpperCase() })}
                       className="w-full bg-background border border-white/10 rounded-lg p-2.5 text-white font-mono tracking-wider disabled:opacity-50"
                     />
                   </div>

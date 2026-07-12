@@ -296,7 +296,7 @@ export default function TermsAcceptance() {
             <span className="text-white font-bold">{applicationData?.full_name}</span>
           </div>
           <div>
-            <span className="text-text-muted block">Tracking ID</span>
+            <span className="text-text-muted block">Application ID</span>
             <span className="text-accent font-mono font-bold">{applicationData?.application_id}</span>
           </div>
           <div>

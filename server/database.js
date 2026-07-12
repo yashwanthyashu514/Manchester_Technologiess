@@ -326,7 +326,7 @@ export const initDb = async () => {
   await runInitQuery(`
     CREATE TABLE IF NOT EXISTS application_status (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tracking_id VARCHAR(50) NOT NULL,
+      application_id VARCHAR(50) NOT NULL,
       email TEXT NOT NULL,
       candidate_name TEXT NOT NULL,
       domain TEXT,
@@ -373,13 +373,19 @@ export const initDb = async () => {
   // Migrate application_status columns if table already exists
   const appStatusColumns = [
     { name: 'reporting_details', type: 'TEXT' },
-    { name: 'remarks', type: 'TEXT' }
+    { name: 'remarks', type: 'TEXT' },
+    { name: 'application_id', type: 'VARCHAR(50)' }
   ];
   for (const col of appStatusColumns) {
     try {
       await dbRun(`ALTER TABLE application_status ADD COLUMN ${col.name} ${col.type}`);
     } catch (err) { /* column already exists */ }
   }
+
+  // Populate application_id from tracking_id if it exists and application_id is null (for backward compatibility)
+  try {
+    await dbRun(`UPDATE application_status SET application_id = tracking_id WHERE application_id IS NULL OR application_id = ''`);
+  } catch (err) { /* ignore if column tracking_id doesn't exist */ }
 
   // Mentors Table
   await runInitQuery(`

@@ -68,7 +68,7 @@ export default function VerifySignature() {
           </span>
           <h1 className="heading-lg mt-4 mb-2">Verify Internship Signature</h1>
           <p className="body-md text-text-secondary max-w-xl mx-auto">
-            Enter a Signature Certificate ID to verify the authenticity of a digital internship agreement signature.
+            Enter an Application ID to verify the authenticity of a digital internship agreement signature.
           </p>
         </AnimatedSection>
 
@@ -85,7 +85,7 @@ export default function VerifySignature() {
                 <form onSubmit={handleSearch} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-1.5">
-                      <Hash className="w-3.5 h-3.5" /> Signature Certificate ID *
+                      <Hash className="w-3.5 h-3.5" /> Application ID *
                     </label>
                     <div className="flex gap-3">
                       <input
@@ -93,7 +93,7 @@ export default function VerifySignature() {
                         required
                         value={certId}
                         onChange={(e) => setCertId(e.target.value.toUpperCase())}
-                        placeholder="MT-SIGN-2026-000001"
+                        placeholder="MT20260001"
                         id="cert-id-input"
                         className="flex-1 bg-background/60 border border-white/10 rounded-lg p-3 text-white focus:border-accent focus:outline-none transition-colors text-sm font-mono tracking-wider"
                       />
@@ -116,7 +116,7 @@ export default function VerifySignature() {
 
                   <p className="text-[10px] text-text-muted flex items-start gap-1.5">
                     <AlertCircle className="w-3 h-3 shrink-0 mt-0.5 text-accent/60" />
-                    Certificate ID format: MT-SIGN-YYYY-NNNNNN (e.g., MT-SIGN-2026-000001). This ID was issued upon digital signing.
+                    Enter the Application ID (e.g., MT20260001) associated with the signed internship agreement.
                   </p>
                 </form>
               </div>
@@ -149,7 +149,7 @@ export default function VerifySignature() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {[
-                    { num: '01', label: 'Enter Certificate ID', desc: 'Input the MT-SIGN Certificate ID from your email or dashboard.' },
+                    { num: '01', label: 'Enter Application ID', desc: 'Input the Application ID from your selection status email or dashboard.' },
                     { num: '02', label: 'Verify in Real-Time', desc: 'Our system cross-checks the ID against our secure immutable ledger.' },
                     { num: '03', label: 'View Details',         desc: 'See candidate name, domain, and exact signing timestamp.' },
                   ].map((step) => (
@@ -207,7 +207,6 @@ export default function VerifySignature() {
                     { icon: User,      label: 'Candidate Name',      value: result.candidate_name },
                     { icon: Briefcase, label: 'Internship Domain',   value: result.domain || 'N/A' },
                     { icon: Hash,      label: 'Application ID',       value: result.application_id },
-                    { icon: PenLine,   label: 'Certificate ID',       value: result.certificate_id, accent: true },
                     {
                       icon: Calendar,
                       label: 'Signed On',

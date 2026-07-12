@@ -469,19 +469,20 @@ app.get('/api/internships/verify-certificate/:certificateNumber', async (req, re
 
 // Track Application Status (simplified 3-state view from application_status table)
 app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res) => {
-  const { email, tracking_id } = req.body;
-  if (!email || !tracking_id) {
-    return res.status(400).json({ error: 'Gmail and Tracking ID are required.' });
+  const { email, application_id, tracking_id } = req.body;
+  const targetId = (application_id || tracking_id || '').trim().toUpperCase();
+  if (!email || !targetId) {
+    return res.status(400).json({ error: 'Gmail and Application ID are required.' });
   }
 
   try {
     const record = await dbGet(
-      `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND tracking_id = ?`,
-      [email.trim(), tracking_id.trim().toUpperCase()]
+      `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND (application_id = ? OR tracking_id = ?)`,
+      [email.trim(), targetId, targetId]
     );
 
     if (!record) {
-      return res.status(404).json({ error: 'No record found. Please verify your Gmail and Tracking ID.' });
+      return res.status(404).json({ error: 'No record found. Please verify your Gmail and Application ID.' });
     }
 
     // If Selected, check if they already signed T&C
@@ -491,7 +492,7 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
     if (record.status === 'Selected') {
       const appRecord = await dbGet(
         `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-        [email.trim(), tracking_id.trim().toUpperCase()]
+        [email.trim(), targetId]
       );
       const normalized = normalizeAppKeys(appRecord || {});
       termsAccepted = !!normalized.termsAccepted;
@@ -499,10 +500,10 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
 
       if (termsAccepted) {
         const sigRecord = await dbGet(
-          `SELECT certificate_id FROM digital_signatures WHERE application_id = ?`,
-          [tracking_id.trim().toUpperCase()]
+          `SELECT certificate_id, application_id FROM digital_signatures WHERE application_id = ? OR certificate_id = ?`,
+          [targetId, targetId]
         );
-        certificateId = sigRecord ? sigRecord.certificate_id : null;
+        certificateId = sigRecord ? (sigRecord.certificate_id || sigRecord.application_id) : null;
       }
     }
 
@@ -510,7 +511,7 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
       success: true,
       record: {
         id: record.id,
-        tracking_id: record.tracking_id,
+        application_id: record.application_id || record.tracking_id,
         email: record.email,
         candidate_name: record.candidate_name,
         domain: record.domain,
@@ -524,7 +525,7 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
       },
       termsAccepted,
       signedAt,
-      certificateId
+      certificateId: certificateId || targetId
     });
 
   } catch (error) {
@@ -533,21 +534,21 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
   }
 });
 
-// Verify Internship Signature (Public Route) — checks MT-SIGN certificate IDs
+// Verify Internship Signature (Public Route) — checks MT-SIGN certificate IDs or Application IDs
 app.get('/api/internships/verify-signature/:certId', rateLimit(15, 60000), async (req, res) => {
   const { certId } = req.params;
   try {
     const sig = await dbGet(
-      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ?`,
-      [certId.toUpperCase()]
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
+      [certId.toUpperCase(), certId.toUpperCase()]
     );
     if (!sig) {
-      return res.status(404).json({ valid: false, error: 'Invalid Certificate ID. No matching signature record found.' });
+      return res.status(404).json({ valid: false, error: 'Invalid ID. No matching signature record found.' });
     }
     return res.json({
       valid: true,
       signature: {
-        certificate_id: sig.certificate_id,
+        certificate_id: sig.certificate_id || sig.application_id,
         candidate_name: sig.candidate_name,
         email: sig.email,
         domain: sig.domain,
@@ -565,19 +566,19 @@ app.get('/api/internships/verify-signature/:certId', rateLimit(15, 60000), async
 // POST version of verify-signature (for form submissions)
 app.post('/api/internships/verify-signature', rateLimit(15, 60000), async (req, res) => {
   const { cert_id } = req.body;
-  if (!cert_id) return res.status(400).json({ error: 'Certificate ID is required.' });
+  if (!cert_id) return res.status(400).json({ error: 'Application ID or Certificate ID is required.' });
   try {
     const sig = await dbGet(
-      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ?`,
-      [cert_id.toUpperCase()]
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
+      [cert_id.toUpperCase(), cert_id.toUpperCase()]
     );
     if (!sig) {
-      return res.status(404).json({ valid: false, error: 'Invalid Certificate ID. No matching signature record found.' });
+      return res.status(404).json({ valid: false, error: 'Invalid ID. No matching signature record found.' });
     }
     return res.json({
       valid: true,
       signature: {
-        certificate_id: sig.certificate_id,
+        certificate_id: sig.certificate_id || sig.application_id,
         candidate_name: sig.candidate_name,
         email: sig.email,
         domain: sig.domain,
@@ -940,11 +941,8 @@ app.post('/api/internships/submit-signature', async (req, res) => {
       ]
     );
 
-    // Generate MT-SIGN Certificate ID
-    const year = new Date().getFullYear();
-    const sigRow = await dbGet(`SELECT COUNT(*) as count FROM digital_signatures`);
-    const sigCount = ((sigRow ? sigRow.count : 0) + 1);
-    const certId = `MT-SIGN-${year}-${String(sigCount).padStart(6, '0')}`;
+    // Use application_id directly as the certificate identifier
+    const certId = normalized.application_id;
 
     // Insert into digital_signatures table
     try {
@@ -1682,9 +1680,9 @@ app.get('/api/admin/application-status', authenticate, requireAdmin, async (req,
     let sql = `SELECT * FROM application_status WHERE 1=1`;
     const params = [];
     if (search) {
-      sql += ` AND (candidate_name LIKE ? OR email LIKE ? OR tracking_id LIKE ? OR domain LIKE ?)`;
+      sql += ` AND (candidate_name LIKE ? OR email LIKE ? OR application_id LIKE ? OR tracking_id LIKE ? OR domain LIKE ?)`;
       const w = `%${search}%`;
-      params.push(w, w, w, w);
+      params.push(w, w, w, w, w);
     }
     if (status) {
       sql += ` AND status = ?`;
@@ -1701,26 +1699,27 @@ app.get('/api/admin/application-status', authenticate, requireAdmin, async (req,
 
 // Create a new application status record
 app.post('/api/admin/application-status', authenticate, requireAdmin, async (req, res) => {
-  const { tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks } = req.body;
-  if (!tracking_id || !email || !candidate_name || !status) {
-    return res.status(400).json({ error: 'Tracking ID, Email, Candidate Name, and Status are required.' });
+  const { application_id, tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks } = req.body;
+  const targetId = (application_id || tracking_id || '').trim().toUpperCase();
+  if (!targetId || !email || !candidate_name || !status) {
+    return res.status(400).json({ error: 'Application ID, Email, Candidate Name, and Status are required.' });
   }
   try {
-    // Check for duplicate tracking_id
-    const existing = await dbGet(`SELECT id FROM application_status WHERE tracking_id = ?`, [tracking_id.toUpperCase()]);
+    // Check for duplicate application_id
+    const existing = await dbGet(`SELECT id FROM application_status WHERE application_id = ? OR tracking_id = ?`, [targetId, targetId]);
     if (existing) {
-      return res.status(400).json({ error: 'A record with this Tracking ID already exists.' });
+      return res.status(400).json({ error: 'A record with this Application ID already exists.' });
     }
     const now = new Date().toISOString();
     await dbRun(
-      `INSERT INTO application_status (tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tracking_id.toUpperCase(), email.trim(), candidate_name.trim(), domain || '', mentor || '', status, start_date || '', reporting_details || '', remarks || '', now, now]
+      `INSERT INTO application_status (application_id, tracking_id, email, candidate_name, domain, mentor, status, start_date, reporting_details, remarks, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [targetId, targetId, email.trim(), candidate_name.trim(), domain || '', mentor || '', status, start_date || '', reporting_details || '', remarks || '', now, now]
     );
 
     // If status is 'Selected', send notification email
     if (status === 'Selected') {
-      const statusRecord = { tracking_id: tracking_id.toUpperCase(), domain, mentor, start_date, reporting_details };
+      const statusRecord = { application_id: targetId, tracking_id: targetId, domain, mentor, start_date, reporting_details };
       try {
         await sendSelectionNotification(candidate_name, email, statusRecord);
       } catch (emailErr) {
@@ -1752,7 +1751,7 @@ app.put('/api/admin/application-status/:id', authenticate, requireAdmin, async (
 
     // If newly set to 'Selected', send notification
     if (status === 'Selected' && existing.status !== 'Selected') {
-      const updatedRecord = { tracking_id: existing.tracking_id, domain, mentor, start_date, reporting_details };
+      const updatedRecord = { application_id: existing.application_id || existing.tracking_id, tracking_id: existing.tracking_id || existing.application_id, domain, mentor, start_date, reporting_details };
       try {
         await sendSelectionNotification(existing.candidate_name, existing.email, updatedRecord);
       } catch (emailErr) {
@@ -1811,7 +1810,7 @@ app.get('/api/admin/digital-signatures', authenticate, requireAdmin, async (req,
 app.get('/api/admin/digital-signatures/:certId/verify', authenticate, requireAdmin, async (req, res) => {
   const { certId } = req.params;
   try {
-    const sig = await dbGet(`SELECT * FROM digital_signatures WHERE certificate_id = ?`, [certId.toUpperCase()]);
+    const sig = await dbGet(`SELECT * FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`, [certId.toUpperCase(), certId.toUpperCase()]);
     if (!sig) {
       return res.json({ valid: false, message: 'No matching signature record found.' });
     }

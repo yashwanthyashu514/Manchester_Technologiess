@@ -805,6 +805,37 @@ export default function AdminInternships() {
           </button>
         </div>
 
+        {/* TAB SELECTOR */}
+        <div className="flex border-b border-white/10 gap-2">
+          {[
+            { id: 'roster', label: 'Candidates Roster', icon: Users },
+            { id: 'status_mgmt', label: 'Status Management', icon: Award },
+            { id: 'signed_docs', label: 'Signed Documents', icon: FileText }
+          ].map((tab) => {
+            const IconComponent = tab.icon;
+            const isSelected = currentTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setCurrentTab(tab.id);
+                  setSelectedApp(null);
+                  setSelectedAppDetails(null);
+                }}
+                className={`flex items-center gap-2 px-5 py-3 text-xs font-bold transition-all border-b-2 uppercase tracking-wider ${
+                  isSelected
+                    ? 'border-accent text-accent bg-accent/5'
+                    : 'border-transparent text-text-secondary hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <IconComponent className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+
         {/* METRICS CARD GRID */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
@@ -1298,35 +1329,7 @@ export default function AdminInternships() {
 
         </div>
 
-                   {/* TAB SELECTOR */}
-        <div className="flex border-b border-white/10 gap-2 mb-6">
-          {[
-            { id: 'roster', label: 'Candidates Roster', icon: Users },
-            { id: 'status_mgmt', label: 'Status Management', icon: Award },
-            { id: 'signed_docs', label: 'Signed Documents', icon: FileText }
-          ].map((tab) => {
-            const IconComponent = tab.icon
-            const isSelected = currentTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setCurrentTab(tab.id)
-                  setSelectedApp(null)
-                  setSelectedAppDetails(null)
-                }}
-                className={`flex items-center gap-2 px-5 py-3 text-xs font-bold transition-all border-b-2 uppercase tracking-wider ${
-                  isSelected
-                    ? 'border-accent text-accent bg-accent/5'
-                    : 'border-transparent text-text-secondary hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <IconComponent className="w-4 h-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
+
 
         {/* ─── TAB 1: ROSTER VIEW ─────────────────────────────────────────── */}
         {currentTab === 'roster' && (

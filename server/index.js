@@ -115,12 +115,31 @@ const upload = multer({
 
 // API Routes
 
-// Initialize Database on startup
-initDb().then(() => {
-  console.log('Database initialized successfully.');
-}).catch(err => {
-  console.error('Database initialization failed:', err);
-});
+// Database initialization wrapper for serverless environments (cold start safe)
+let isDbInitialized = false;
+let dbInitPromise = null;
+
+const ensureDb = async (req, res, next) => {
+  if (isDbInitialized) return next();
+  if (!dbInitPromise) {
+    dbInitPromise = initDb().then(() => {
+      isDbInitialized = true;
+    }).catch(err => {
+      dbInitPromise = null;
+      throw err;
+    });
+  }
+  try {
+    await dbInitPromise;
+    next();
+  } catch (err) {
+    console.error('Database initialization failed in middleware:', err);
+    return res.status(500).json({ error: `Database initialization failed: ${err.message}` });
+  }
+};
+
+// Apply database initializer middleware to all API routes
+app.use('/api', ensureDb);
 
 // Helper: Generate PDF Certificate
 const generateCertificatePDF = async (cert, outputPath) => {
@@ -1064,7 +1083,7 @@ app.post('/api/auth/admin-login', async (req, res) => {
     });
   } catch (error) {
     console.error('Admin login error:', error);
-    return res.status(500).json({ error: 'Internal login error.' });
+    return res.status(500).json({ error: `Internal login error: ${error.message}` });
   }
 });
 
@@ -1956,7 +1975,7 @@ app.post('/api/auth/mentor-login', async (req, res) => {
 
   } catch (err) {
     console.error('Mentor login error:', err);
-    return res.status(500).json({ error: 'Internal login error.' });
+    return res.status(500).json({ error: `Internal login error: ${err.message}` });
   }
 });
 

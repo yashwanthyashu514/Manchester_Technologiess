@@ -412,35 +412,39 @@ app.post('/api/internships/status', async (req, res) => {
   }
 
   try {
+    const idVars = getIdVariations(application_id);
+    const placeholders = idVars.map(() => '?').join(', ');
     const app = await dbGet(
       `SELECT application_id, full_name, email, preferred_domain, preferred_duration, status, created_at, updated_at, termsAccepted, signedAt 
-       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`, 
-      [email.trim(), application_id.trim()]
+       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id IN (${placeholders})`, 
+      [email.trim(), ...idVars]
     );
 
     if (!app) {
       return res.status(404).json({ error: 'No application found with the provided Email Address and Application ID.' });
     }
 
+    const normalizedApp = normalizeAppKeys(app);
+
     // Fetch details based on status
     let interviewDetails = null;
     let projectDetails = null;
     let certificateDetails = null;
 
-    if (app.status === 'Interview Scheduled') {
-      interviewDetails = await dbGet(`SELECT * FROM interviews WHERE application_id = ?`, [app.application_id]);
+    if (normalizedApp.status === 'Interview Scheduled') {
+      interviewDetails = await dbGet(`SELECT * FROM interviews WHERE application_id = ?`, [normalizedApp.application_id]);
     }
 
-    if (['Selected', 'Active Intern', 'Completed'].includes(app.status)) {
-      projectDetails = await dbGet(`SELECT * FROM project_assignments WHERE application_id = ?`, [app.application_id]);
+    if (['Selected', 'Active Intern', 'Completed'].includes(normalizedApp.status)) {
+      projectDetails = await dbGet(`SELECT * FROM project_assignments WHERE application_id = ?`, [normalizedApp.application_id]);
     }
 
-    if (app.status === 'Completed') {
-      certificateDetails = await dbGet(`SELECT * FROM certificates WHERE application_id = ?`, [app.application_id]);
+    if (normalizedApp.status === 'Completed') {
+      certificateDetails = await dbGet(`SELECT * FROM certificates WHERE application_id = ?`, [normalizedApp.application_id]);
     }
 
     return res.json({
-      application: app,
+      application: normalizedApp,
       interview: interviewDetails,
       project: projectDetails,
       certificate: certificateDetails
@@ -476,9 +480,12 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
   }
 
   try {
+    const idVars = getIdVariations(targetId);
+    const placeholders = idVars.map(() => '?').join(', ');
+
     let record = await dbGet(
-      `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND (application_id = ? OR tracking_id = ?)`,
-      [email.trim(), targetId, targetId]
+      `SELECT * FROM application_status WHERE LOWER(email) = LOWER(?) AND (application_id IN (${placeholders}) OR tracking_id IN (${placeholders}))`,
+      [email.trim(), ...idVars, ...idVars]
     );
 
     let isFallback = false;
@@ -487,8 +494,8 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
     if (!record) {
       // Fallback: Check the main applications table
       appRecord = await dbGet(
-        `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-        [email.trim(), targetId]
+        `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id IN (${placeholders})`,
+        [email.trim(), ...idVars]
       );
       if (appRecord) {
         const normalized = normalizeAppKeys(appRecord);
@@ -517,8 +524,8 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
     if (record.status === 'Selected') {
       if (!appRecord) {
         appRecord = await dbGet(
-          `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-          [email.trim(), targetId]
+          `SELECT termsAccepted, signedAt FROM applications WHERE LOWER(email) = LOWER(?) AND application_id IN (${placeholders})`,
+          [email.trim(), ...idVars]
         );
       }
       const normalized = normalizeAppKeys(appRecord || {});
@@ -527,18 +534,20 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
 
       if (termsAccepted) {
         const sigRecord = await dbGet(
-          `SELECT certificate_id, application_id FROM digital_signatures WHERE application_id = ? OR certificate_id = ?`,
-          [targetId, targetId]
+          `SELECT certificate_id, application_id FROM digital_signatures WHERE application_id IN (${placeholders}) OR certificate_id IN (${placeholders})`,
+          [...idVars, ...idVars]
         );
         certificateId = sigRecord ? (sigRecord.certificate_id || sigRecord.application_id) : null;
       }
     }
 
+    const finalAppId = (appRecord ? normalizeAppKeys(appRecord).application_id : null) || record.application_id || targetId;
+
     return res.json({
       success: true,
       record: {
         id: record.id,
-        application_id: record.application_id || record.tracking_id,
+        application_id: finalAppId,
         email: record.email,
         candidate_name: record.candidate_name,
         domain: record.domain,
@@ -552,7 +561,7 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
       },
       termsAccepted,
       signedAt,
-      certificateId: certificateId || targetId
+      certificateId: certificateId || finalAppId
     });
 
   } catch (error) {
@@ -565,15 +574,17 @@ app.post('/api/internships/track-status', rateLimit(10, 60000), async (req, res)
 app.get('/api/internships/verify-signature/:certId', rateLimit(15, 60000), async (req, res) => {
   const { certId } = req.params;
   try {
+    const idVars = getIdVariations(certId);
+    const placeholders = idVars.map(() => '?').join(', ');
     let sig = await dbGet(
-      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
-      [certId.toUpperCase(), certId.toUpperCase()]
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id IN (${placeholders}) OR application_id IN (${placeholders})`,
+      [...idVars, ...idVars]
     );
     if (!sig) {
       // Fallback: Check if they signed in the main applications table
       const app = await dbGet(
-        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id = ? AND (termsAccepted = 1 OR termsaccepted = 1)`,
-        [certId.toUpperCase()]
+        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id IN (${placeholders}) AND (termsAccepted = 1 OR termsaccepted = 1)`,
+        [...idVars]
       );
       if (app) {
         const normalized = normalizeAppKeys(app);
@@ -615,15 +626,17 @@ app.post('/api/internships/verify-signature', rateLimit(15, 60000), async (req, 
   const { cert_id } = req.body;
   if (!cert_id) return res.status(400).json({ error: 'Application ID or Certificate ID is required.' });
   try {
+    const idVars = getIdVariations(cert_id);
+    const placeholders = idVars.map(() => '?').join(', ');
     let sig = await dbGet(
-      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`,
-      [cert_id.toUpperCase(), cert_id.toUpperCase()]
+      `SELECT certificate_id, application_id, email, candidate_name, domain, signed_at, created_at FROM digital_signatures WHERE certificate_id IN (${placeholders}) OR application_id IN (${placeholders})`,
+      [...idVars, ...idVars]
     );
     if (!sig) {
       // Fallback: Check if they signed in the main applications table
       const app = await dbGet(
-        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id = ? AND (termsAccepted = 1 OR termsaccepted = 1)`,
-        [cert_id.toUpperCase()]
+        `SELECT application_id, email, full_name, preferred_domain, signedAt FROM applications WHERE application_id IN (${placeholders}) AND (termsAccepted = 1 OR termsaccepted = 1)`,
+        [...idVars]
       );
       if (app) {
         const normalized = normalizeAppKeys(app);
@@ -713,6 +726,57 @@ const normalizeAppKeys = (app) => {
     }
   }
   return normalized;
+};
+
+// Robust ID variation generator to support both MTI-YYYY-NNNN and MTYYYYNNNN formats
+const getIdVariations = (id) => {
+  if (!id) return [];
+  const clean = id.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const variations = [id.trim().toUpperCase(), clean];
+  
+  const mtMatch = clean.match(/^MT(\d{4})(\d{4})$/);
+  if (mtMatch) {
+    const year = mtMatch[1];
+    const num = mtMatch[2];
+    variations.push(`MTI-${year}-${num}`);
+    variations.push(`MT-${year}-${num}`);
+    variations.push(`MTI${year}${num}`);
+  }
+  
+  const mtiMatch = clean.match(/^MTI(\d{4})(\d{4})$/);
+  if (mtiMatch) {
+    const year = mtiMatch[1];
+    const num = mtiMatch[2];
+    variations.push(`MT${year}${num}`);
+    variations.push(`MT-${year}-${num}`);
+    variations.push(`MTI-${year}-${num}`);
+  }
+  
+  return [...new Set(variations)];
+};
+
+// Sync status changes from applications table to application_status table
+const syncApplicationStatusTable = async (applicationId, status, updatedAt) => {
+  try {
+    const idVars = getIdVariations(applicationId);
+    const placeholders = idVars.map(() => '?').join(', ');
+    const existing = await dbGet(`SELECT id FROM application_status WHERE application_id IN (${placeholders})`, [...idVars]);
+    if (existing) {
+      await dbRun(`UPDATE application_status SET status = ?, updated_at = ? WHERE id = ?`, [status, updatedAt, existing.id]);
+    } else {
+      const app = await dbGet(`SELECT email, full_name, preferred_domain FROM applications WHERE application_id IN (${placeholders})`, [...idVars]);
+      if (app) {
+        const normalized = normalizeAppKeys(app);
+        await dbRun(
+          `INSERT INTO application_status (application_id, tracking_id, email, candidate_name, domain, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [applicationId, applicationId, normalized.email, normalized.full_name, normalized.preferred_domain || '', status, updatedAt, updatedAt]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync application_status table:', err);
+  }
 };
 
 // Helper: Generate Signed Agreement PDF
@@ -907,10 +971,12 @@ app.post('/api/internships/verify-tc-eligibility', async (req, res) => {
   }
 
   try {
+    const idVars = getIdVariations(application_id);
+    const placeholders = idVars.map(() => '?').join(', ');
     const app = await dbGet(
       `SELECT id, application_id, full_name, email, status, termsAccepted, signedAt 
-       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-      [email.trim(), application_id.trim()]
+       FROM applications WHERE LOWER(email) = LOWER(?) AND application_id IN (${placeholders})`,
+      [email.trim(), ...idVars]
     );
 
     if (!app) {
@@ -951,9 +1017,11 @@ app.post('/api/internships/submit-signature', async (req, res) => {
   }
 
   try {
+    const idVars = getIdVariations(application_id);
+    const placeholders = idVars.map(() => '?').join(', ');
     const app = await dbGet(
-      `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id = ?`,
-      [email.trim(), application_id.trim()]
+      `SELECT * FROM applications WHERE LOWER(email) = LOWER(?) AND application_id IN (${placeholders})`,
+      [email.trim(), ...idVars]
     );
 
     if (!app) {
@@ -1438,6 +1506,12 @@ app.post('/api/admin/applications/:id/status', authenticate, requireAdmin, async
   try {
     const updated_at = new Date().toISOString();
     await dbRun(`UPDATE applications SET status = ?, updated_at = ? WHERE id = ?`, [status, updated_at, id]);
+
+    const app = await dbGet(`SELECT application_id FROM applications WHERE id = ?`, [id]);
+    if (app) {
+      await syncApplicationStatusTable(app.application_id, status, updated_at);
+    }
+
     return res.json({ success: true, message: `Status updated to ${status}.` });
   } catch (error) {
     console.error('Update status error:', error);
@@ -1505,7 +1579,9 @@ app.post('/api/admin/applications/:id/interview', authenticate, requireAdmin, as
     }
 
     // Update Application status
-    await dbRun(`UPDATE applications SET status = 'Interview Scheduled', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
+    const statusTime = new Date().toISOString();
+    await dbRun(`UPDATE applications SET status = 'Interview Scheduled', updated_at = ? WHERE id = ?`, [statusTime, id]);
+    await syncApplicationStatusTable(app.application_id, 'Interview Scheduled', statusTime);
 
     // Send notification
     const updatedApp = await dbGet(`SELECT * FROM applications WHERE id = ?`, [id]);
@@ -1563,7 +1639,9 @@ app.post('/api/admin/applications/:id/assign-project', authenticate, requireAdmi
     }
 
     // Update status to 'Active Intern'
-    await dbRun(`UPDATE applications SET status = 'Active Intern', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
+    const statusTime = new Date().toISOString();
+    await dbRun(`UPDATE applications SET status = 'Active Intern', updated_at = ? WHERE id = ?`, [statusTime, id]);
+    await syncApplicationStatusTable(app.application_id, 'Active Intern', statusTime);
 
     return res.json({ success: true, message: 'Project assigned and intern activated.' });
 
@@ -1655,7 +1733,9 @@ app.post('/api/admin/applications/:id/complete', authenticate, requireAdmin, asy
     await generateCertificatePDF(certData, certPath);
 
     // Update status to 'Completed'
-    await dbRun(`UPDATE applications SET status = 'Completed', updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
+    const statusTime = new Date().toISOString();
+    await dbRun(`UPDATE applications SET status = 'Completed', updated_at = ? WHERE id = ?`, [statusTime, id]);
+    await syncApplicationStatusTable(app.application_id, 'Completed', statusTime);
 
     return res.json({
       success: true,
@@ -1784,6 +1864,14 @@ app.post('/api/admin/application-status', authenticate, requireAdmin, async (req
       [targetId, targetId, email.trim(), candidate_name.trim(), domain || '', mentor || '', status, start_date || '', reporting_details || '', remarks || '', now, now]
     );
 
+    // Update main applications table to ensure they stay in sync
+    const idVars = getIdVariations(targetId);
+    const placeholders = idVars.map(() => '?').join(', ');
+    await dbRun(
+      `UPDATE applications SET status = ?, updated_at = ? WHERE application_id IN (${placeholders})`,
+      [status, now, ...idVars]
+    );
+
     // If status is 'Selected', send notification email
     if (status === 'Selected') {
       const statusRecord = { application_id: targetId, tracking_id: targetId, domain, mentor, start_date, reporting_details };
@@ -1815,6 +1903,18 @@ app.put('/api/admin/application-status/:id', authenticate, requireAdmin, async (
       `UPDATE application_status SET domain = ?, mentor = ?, status = ?, start_date = ?, reporting_details = ?, remarks = ?, updated_at = ? WHERE id = ?`,
       [domain || existing.domain, mentor || existing.mentor, status || existing.status, start_date || existing.start_date, reporting_details || existing.reporting_details, remarks || existing.remarks, now, id]
     );
+
+    // Update main applications table to ensure they stay in sync
+    const targetStatus = status || existing.status;
+    const appId = existing.application_id || existing.tracking_id;
+    if (appId) {
+      const idVars = getIdVariations(appId);
+      const placeholders = idVars.map(() => '?').join(', ');
+      await dbRun(
+        `UPDATE applications SET status = ?, updated_at = ? WHERE application_id IN (${placeholders})`,
+        [targetStatus, now, ...idVars]
+      );
+    }
 
     // If newly set to 'Selected', send notification
     if (status === 'Selected' && existing.status !== 'Selected') {
@@ -1877,7 +1977,9 @@ app.get('/api/admin/digital-signatures', authenticate, requireAdmin, async (req,
 app.get('/api/admin/digital-signatures/:certId/verify', authenticate, requireAdmin, async (req, res) => {
   const { certId } = req.params;
   try {
-    const sig = await dbGet(`SELECT * FROM digital_signatures WHERE certificate_id = ? OR application_id = ?`, [certId.toUpperCase(), certId.toUpperCase()]);
+    const idVars = getIdVariations(certId);
+    const placeholders = idVars.map(() => '?').join(', ');
+    const sig = await dbGet(`SELECT * FROM digital_signatures WHERE certificate_id IN (${placeholders}) OR application_id IN (${placeholders})`, [...idVars, ...idVars]);
     if (!sig) {
       return res.json({ valid: false, message: 'No matching signature record found.' });
     }
@@ -1893,7 +1995,9 @@ app.get('/api/admin/digital-signatures/:appId/download-pdf', authenticate, requi
   const { appId } = req.params;
   try {
     // Find the application by application_id
-    const appRecord = await dbGet(`SELECT * FROM applications WHERE application_id = ?`, [appId]);
+    const idVars = getIdVariations(appId);
+    const placeholders = idVars.map(() => '?').join(', ');
+    const appRecord = await dbGet(`SELECT * FROM applications WHERE application_id IN (${placeholders})`, [...idVars]);
     if (!appRecord) {
       return res.status(404).json({ error: 'Application not found.' });
     }

@@ -3,6 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);

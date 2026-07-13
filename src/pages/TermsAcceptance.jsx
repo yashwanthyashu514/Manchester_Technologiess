@@ -116,10 +116,15 @@ export default function TermsAcceptance() {
       if (!pdfDocument || !canvasRef.current) return
 
       let renderTask = null;
+      let isCancelled = false;
+
       const renderPage = async () => {
         try {
           const page = await pdfDocument.getPage(pageNumber)
+          if (isCancelled) return;
+
           const canvas = canvasRef.current
+          if (!canvas) return;
           const context = canvas.getContext('2d')
 
           // Calculate viewport based on container width
@@ -141,6 +146,7 @@ export default function TermsAcceptance() {
             transform: [dpr, 0, 0, dpr, 0, 0] // Apply scale transformation
           }
 
+          if (isCancelled) return;
           renderTask = page.render(renderContext)
           await renderTask.promise
         } catch (err) {
@@ -153,6 +159,7 @@ export default function TermsAcceptance() {
       renderPage()
 
       return () => {
+        isCancelled = true;
         if (renderTask) {
           renderTask.cancel()
         }

@@ -101,10 +101,15 @@ export default function AdminViewSignedTc() {
       if (!pdfDocument || !canvasRef.current) return
 
       let renderTask = null;
+      let isCancelled = false;
+
       const renderPage = async () => {
         try {
           const page = await pdfDocument.getPage(pageNumber)
+          if (isCancelled) return;
+
           const canvas = canvasRef.current
+          if (!canvas) return;
           const context = canvas.getContext('2d')
 
           // Lock to target design width for standard desktop/print alignment (720px)
@@ -125,6 +130,7 @@ export default function AdminViewSignedTc() {
             transform: [dpr, 0, 0, dpr, 0, 0]
           }
 
+          if (isCancelled) return;
           renderTask = page.render(renderContext)
           await renderTask.promise
         } catch (err) {
@@ -137,6 +143,7 @@ export default function AdminViewSignedTc() {
       renderPage()
 
       return () => {
+        isCancelled = true;
         if (renderTask) {
           renderTask.cancel()
         }

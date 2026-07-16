@@ -20,7 +20,6 @@ import DigitalSignature from './pages/DigitalSignature'
 import AdminViewSignedTc from './pages/AdminViewSignedTc'
 import TrackApplicationStatus from './pages/TrackApplicationStatus'
 import VerifySignature from './pages/VerifySignature'
-import HelpCenter from './pages/HelpCenter'
 
 
 const pageVariants = {
@@ -169,14 +168,6 @@ function App() {
             element={
               <AnimatedPage>
                 <VerifySignature />
-              </AnimatedPage>
-            }
-          />
-          <Route
-            path="/internships/help"
-            element={
-              <AnimatedPage>
-                <HelpCenter />
               </AnimatedPage>
             }
           />

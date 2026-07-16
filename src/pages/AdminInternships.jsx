@@ -1002,11 +1002,7 @@ export default function AdminInternships() {
         <div className="flex border-b border-white/10 gap-2 overflow-x-auto scrollbar-none pb-1">
           {[
             { id: 'roster', label: 'Candidates Roster', icon: Users },
-            { id: 'status_mgmt', label: 'Status Management', icon: Award },
-            { id: 'signed_docs', label: 'Signed Documents', icon: FileText },
-            { id: 'mentors_mgmt', label: 'Mentor Management', icon: UserCheck },
-            { id: 'assignments_mgmt', label: 'Smart Assignment', icon: Shuffle },
-            { id: 'analytics_board', label: 'Advanced Analytics', icon: BarChart3 }
+            { id: 'signed_docs', label: 'Signed Documents', icon: FileText }
           ].map((tab) => {
             const IconComponent = tab.icon;
             const isSelected = currentTab === tab.id;

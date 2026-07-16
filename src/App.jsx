@@ -14,15 +14,12 @@ import InternshipsLanding from './pages/InternshipsLanding'
 import InternshipApply from './pages/InternshipApply'
 import InternshipStatus from './pages/InternshipStatus'
 import AdminInternships from './pages/AdminInternships'
-import InternDashboard from './pages/InternDashboard'
 import VerifyCertificate from './pages/VerifyCertificate'
 import TermsAcceptance from './pages/TermsAcceptance'
 import DigitalSignature from './pages/DigitalSignature'
 import AdminViewSignedTc from './pages/AdminViewSignedTc'
 import TrackApplicationStatus from './pages/TrackApplicationStatus'
 import VerifySignature from './pages/VerifySignature'
-import MentorLogin from './pages/MentorLogin'
-import MentorDashboard from './pages/MentorDashboard'
 import HelpCenter from './pages/HelpCenter'
 
 
@@ -128,14 +125,6 @@ function App() {
             }
           />
           <Route
-            path="/internships/dashboard"
-            element={
-              <AnimatedPage>
-                <InternDashboard />
-              </AnimatedPage>
-            }
-          />
-          <Route
             path="/internships/verify-certificate/:certificateNumber"
             element={
               <AnimatedPage>
@@ -180,22 +169,6 @@ function App() {
             element={
               <AnimatedPage>
                 <VerifySignature />
-              </AnimatedPage>
-            }
-          />
-          <Route
-            path="/mentor/login"
-            element={
-              <AnimatedPage>
-                <MentorLogin />
-              </AnimatedPage>
-            }
-          />
-          <Route
-            path="/mentor/dashboard"
-            element={
-              <AnimatedPage>
-                <MentorDashboard />
               </AnimatedPage>
             }
           />
